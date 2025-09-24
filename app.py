@@ -129,21 +129,21 @@ def ask():
             {
             "prompt_tokens": prompt_tokens4mini,
             "completion_tokens": completion_tokens4mini,
-            "cost/1K" : ((prompt_tokens4mini*0.15+completion_tokens4mini*0.06)/1000)
+            "costper1K" : ((prompt_tokens4mini*0.15+completion_tokens4mini*0.06)/1000)
             },
         "answer5mini": reply5mini,
         "usage5mini": 
             {
             "prompt_tokens": prompt_tokens5mini,
             "completion_tokens": completion_tokens5mini,
-            "cost/1K" : ((prompt_tokens5mini*0.25+completion_tokens5mini*2)/1000)
+            "costper1K" : ((prompt_tokens5mini*0.25+completion_tokens5mini*2)/1000)
             },
         "answer5nano": reply5nano,
         "usage5nano": 
             {
             "prompt_tokens": prompt_tokens5nano,
             "completion_tokens": completion_tokens5nano,
-            "cost/1K" : ((prompt_tokens5nano*0.05+completion_tokens5nano*0.4)/1000)
+            "costper1K" : ((prompt_tokens5nano*0.05+completion_tokens5nano*0.4)/1000)
             }
         })
 

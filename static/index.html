@@ -58,15 +58,15 @@
       // 把結果填到三個區塊
       document.getElementById("result4mini").innerText =
         data.answer4mini + "\n\nTokens: prompt=" + data.usage4mini.prompt_tokens +
-        ", completion=" + data.usage4mini.completion_tokens;
+        ", completion=" + data.usage4mini.completion_tokens+", cost/1K="+data.usage4mini.costper1K;
 
       document.getElementById("result5mini").innerText =
         data.answer5mini + "\n\nTokens: prompt=" + data.usage5mini.prompt_tokens +
-        ", completion=" + data.usage5mini.completion_tokens;
+        ", completion=" + data.usage5mini.completion_tokens+", cost/1K="+data.usage5mini.costper1K;
 
       document.getElementById("result5nano").innerText =
         data.answer5nano + "\n\nTokens: prompt=" + data.usage5nano.prompt_tokens +
-        ", completion=" + data.usage5nano.completion_tokens;
+        ", completion=" + data.usage5nano.completion_tokens+", cost/1K="+data.usage5nano.costper1K;
     }
 
     function randomHexagram() {
