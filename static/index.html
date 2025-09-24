@@ -29,9 +29,6 @@
     <h3>gpt-4o-mini</h3>
     <div id="result4mini" class="result"></div>
 
-    <h3>gpt-5-mini</h3>
-    <div id="result5mini" class="result"></div>
-
   </div>
 
   <script>
@@ -58,9 +55,6 @@
         data.answer4mini + "\n\nTokens: prompt=" + data.usage4mini.prompt_tokens +
         ", completion=" + data.usage4mini.completion_tokens+", cost/1K="+data.usage4mini.costper1K;
 
-      document.getElementById("result5mini").innerText =
-        data.answer5mini + "\n\nTokens: prompt=" + data.usage5mini.prompt_tokens +
-        ", completion=" + data.usage5mini.completion_tokens+", cost/1K="+data.usage5mini.costper1K;
     }
 
     function randomHexagram() {
