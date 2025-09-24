@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>易經解卦測試</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    textarea { width: 100%; height: 100px; }
+    .result { border: 1px solid #ccc; padding: 10px; margin-top: 10px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>易經解卦 Demo</h1>
+  
+  <label>使用者名稱:</label><br>
+  <input type="text" id="user_name" value="TheMistry"><br><br>
+
+  <label>問題:</label><br>
+  <textarea id="question"></textarea><br><br>
+
+  <!-- 隱藏欄位，用來存 throws -->
+  <input type="hidden" id="throws">
+
+  <button onclick="randomHexagram()">🎲 隨機起卦</button>
+  <button onclick="sendRequest()">送出</button>
+
+  <h2>結果</h2>
+  <div>
+    <h3>gpt-4o-mini</h3>
+    <div id="result4mini" class="result"></div>
+
+    <h3>gpt-5-mini</h3>
+    <div id="result5mini" class="result"></div>
+
+    <h3>gpt-5-nano</h3>
+    <div id="result5nano" class="result"></div>
+  </div>
+
+  <script>
+    async function sendRequest() {
+      const user_name = document.getElementById("user_name").value;
+      const question = document.getElementById("question").value;
+      const throws = JSON.parse(document.getElementById("throws").value || "[]");
+
+      const body = {
+        user_name,
+        question,
+        throws
+      };
+
+      const response = await fetch("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = await response.json();
+
+      // 把結果填到三個區塊
+      document.getElementById("result4mini").innerText =
+        data.answer4mini + "\n\nTokens: prompt=" + data.usage4mini.prompt_tokens +
+        ", completion=" + data.usage4mini.completion_tokens;
+
+      document.getElementById("result5mini").innerText =
+        data.answer5mini + "\n\nTokens: prompt=" + data.usage5mini.prompt_tokens +
+        ", completion=" + data.usage5mini.completion_tokens;
+
+      document.getElementById("result5nano").innerText =
+        data.answer5nano + "\n\nTokens: prompt=" + data.usage5nano.prompt_tokens +
+        ", completion=" + data.usage5nano.completion_tokens;
+    }
+
+    function randomHexagram() {
+      const throws = [];
+      for (let i = 0; i < 6; i++) {
+        const val = Math.floor(Math.random() * 4) + 6; // 6~9
+        throws.push(val);
+      }
+      document.getElementById("throws").value = JSON.stringify(throws);
+      alert("擲卦結果: " + throws.join(", "));
+    }
+  </script>
+</body>
+</html>
