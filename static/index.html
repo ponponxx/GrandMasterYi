@@ -15,14 +15,13 @@
   <label>使用者名稱:</label><br>
   <input type="text" id="user_name" value="TheMistry"><br><br>
 
-  <label>問題:</label><br>
+  <label>想占卜的問題:</label><br>
   <textarea id="question"></textarea><br><br>
 
   <!-- 隱藏欄位，用來存 throws -->
   <input type="hidden" id="throws">
 
-  <button onclick="randomHexagram()">🎲 隨機起卦</button>
-  <button onclick="sendRequest()">送出</button>
+  <button onclick="randomAndSend()">🎲 隨機起卦 + 送出</button>
 
   <h2>結果</h2>
   <div>
@@ -33,9 +32,9 @@
 
   <script>
     async function sendRequest() {
+      const throws = JSON.parse(document.getElementById("throws").value || "[]");
       const user_name = document.getElementById("user_name").value;
       const question = document.getElementById("question").value;
-      const throws = JSON.parse(document.getElementById("throws").value || "[]");
 
       const body = {
         user_name,
@@ -48,13 +47,24 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      const data = await response.json();
+      
+      //const data = await response.json();
 
       // 把結果填到三個區塊
-      document.getElementById("result4mini").innerText =
-        data.answer4mini + "\n\nTokens: prompt=" + data.usage4mini.prompt_tokens +
-        ", completion=" + data.usage4mini.completion_tokens+", cost/1K="+data.usage4mini.costper1K;
+      //document.getElementById("result4mini").innerText =
+      //  data.answer4mini + "\n\nTokens: prompt=" + data.usage4mini.prompt_tokens +
+      //  ", completion=" + data.usage4mini.completion_tokens+", cost/1K="+data.usage4mini.costper1K;
 
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      document.getElementById("result4mini").innerText = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        document.getElementById("result4mini").innerText += decoder.decode(value);
+        }
     }
 
     function randomHexagram() {
@@ -64,8 +74,17 @@
         throws.push(val);
       }
       document.getElementById("throws").value = JSON.stringify(throws);
-      alert("擲卦結果: " + throws.join(", "));
+      //alert("擲卦結果: " + throws.join(", "));
+    }
+
+    function randomAndSend() {
+      const user_name = document.getElementById("user_name").value;
+      const question = document.getElementById("question").value;
+      randomHexagram();  // 先生成卦象
+      alert(`假爾泰筮有常，假爾泰筮有常，${user_name}，今以「${question}」云云，未知可否？爰質疑于神于靈，吉凶得失，悔吝憂虞，惟爾有神，尚明告之。`);
+      sendRequest();     // 再送出到後端 
     }
   </script>
+
 </body>
 </html>
