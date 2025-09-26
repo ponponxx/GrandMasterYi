@@ -18,10 +18,13 @@
   <label>問題:</label><br>
   <textarea id="question"></textarea><br><br>
 
+  <label>指定掛:</label><br>
+  <textarea id="fixedHexagram"></textarea><br><br>
+
   <!-- 隱藏欄位，用來存 throws -->
   <input type="hidden" id="throws">
 
-  <button onclick="randomHexagram()">🎲 隨機起卦</button>
+  <!--<button onclick="randomHexagram()">🎲 隨機起卦</button>-->
   <button onclick="sendRequest()">送出</button>
 
   <h2>結果</h2>
@@ -40,7 +43,13 @@
     async function sendRequest() {
       const user_name = document.getElementById("user_name").value;
       const question = document.getElementById("question").value;
-      const throws = JSON.parse(document.getElementById("throws").value || "[]");
+      const fixedInput = document.getElementById("fixedHexagram").value.trim();
+      if (!fixedInput) {
+        alert("⚠️ 請輸入指定卦，例如：6,6,6,8,8,8");
+        return; // 直接中斷，不送出
+        }
+      let throws = [];
+      throws = fixedInput.split(",").map(v => parseInt(v.trim(), 10));
 
       const body = {
         user_name,
