@@ -3,6 +3,8 @@ from flask import Flask, request, jsonify
 from openai import OpenAI
 from dotenv import load_dotenv
 import sqlite3
+from xai_sdk import Client
+from xai_sdk.chat import user, system
 load_dotenv()  # 自動讀取 .env
 
 app = Flask(__name__)
@@ -78,7 +80,7 @@ def ask():
     變爻：{changing_lines if changing_lines else "無"}"""
     if lines_text:
         promptCore += "\n爻辭：\n" + "\n".join([f"{pos} {txt}" for pos, txt in lines_text])
-    prompt = promptCore+"請根據以上資訊，進行占卜說明。"
+    prompt = promptCore+"請根據以上資訊，進行500字占卜說明。"
 
     promptForSystem = "You are an expert I Ching interpreter. First, classify the user's query:- If it's asking for specific predictions like 'who' (person), 'what (event or action), 'when'(time), or 'what thing' (object/outcome), label it as 'SPECIFIC_PREDICTION'.\
     - If it's asking for general advice, guidance, or suggestions based on the hexagram, label it as 'ADVICE'.\
@@ -104,15 +106,17 @@ Based on classification:\
         ],
         max_completion_tokens=3500
     )
-
-    response5nano = client.chat.completions.create(
-        model="gpt-5-nano",
-        messages=[
-            {"role": "system", "content": promptForSystem5mini},
-            {"role": "user", "content": prompt}
-        ],
-        max_completion_tokens=6000
+    clientgrok = Client(
+    api_key=os.getenv("XAI_API_KEY"),
+    timeout=3600, # Override default timeout with longer timeout for reasoning models
     )
+
+    chat = clientgrok.chat.create(model="grok-4-fast-reasoning")
+    chat.append(system(promptForSystem))
+    chat.append(user(prompt))
+    responsegrok4FR = chat.sample()
+
+
     promptForSystem4o = "你是一個易經老師,請整合用戶提供的所有情報,彙整一合理的預測提供給使用者"
     promptUser4o = promptCore + response5mini.choices[0].message.content + "請根據以上情報提供1000字內建議."
 
@@ -136,10 +140,7 @@ Based on classification:\
     prompt_tokens5mini = usage5mini.prompt_tokens
     completion_tokens5mini = usage5mini.completion_tokens
 
-    reply5nano = response5nano.choices[0].message.content
-    usage5nano = response5nano.usage
-    prompt_tokens5nano = usage5nano.prompt_tokens
-    completion_tokens5nano = usage5nano.completion_tokens
+    
     
     return jsonify({
         "answer4mini": reply4mini,
@@ -156,12 +157,12 @@ Based on classification:\
             "completion_tokens": completion_tokens5mini,
             "costper1K" : ((prompt_tokens5mini*0.25+completion_tokens5mini*2)/1000)
             },
-        "answer5nano": reply5nano,
-        "usage5nano": 
+        "answergrok4FR": responsegrok4FR,
+        "usagegrok4FR": 
             {
-            "prompt_tokens": prompt_tokens5nano,
-            "completion_tokens": completion_tokens5nano,
-            "costper1K" : ((prompt_tokens5nano*0.05+completion_tokens5nano*0.4)/1000)
+            "prompt_tokens",
+            "completion_tokens",
+            "costper1K"             
             }
         })
 
