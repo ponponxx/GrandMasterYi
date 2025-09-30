@@ -71,14 +71,14 @@ def ask():
     conn.close()
     
     # ---- 組 Prompt ----
-    prompt = f"""使用者：{user_name}
+    promptCore = f"""使用者：{user_name}
     問題：{question}
     本卦：{hex_name}
     卦辭：{judgment}
     變爻：{changing_lines if changing_lines else "無"}"""
     if lines_text:
-        prompt += "\n爻辭：\n" + "\n".join([f"{pos} {txt}" for pos, txt in lines_text])
-    prompt += "請根據以上資訊，進行占卜說明。"
+        promptCore += "\n爻辭：\n" + "\n".join([f"{pos} {txt}" for pos, txt in lines_text])
+    prompt = promptCore+"請根據以上資訊，進行占卜說明。"
 
     promptForSystem = "You are an expert I Ching interpreter. First, classify the user's query:- If it's asking for specific predictions like 'who' (person), 'what (event or action), 'when'(time), or 'what thing' (object/outcome), label it as 'SPECIFIC_PREDICTION'.\
     - If it's asking for general advice, guidance, or suggestions based on the hexagram, label it as 'ADVICE'.\
@@ -92,33 +92,39 @@ Based on classification:\
 - If ADVICE: Offer general guidance, suggestions, or reflections based on the hexagram's wisdom. Encourage positive actions.\
   Example response: '建議: In this situation, maintain patience like the mountain hexagram advises, and seek balance."
 
+    promptForSystem5mini = "你是一個易經大師,先分析用戶問題,如果是問特定人事時地物,請以條列式精簡列出各掛辭爻辭對應該問題的隱含意義,最後以一句話總結,如果是問建議,無須條列掛辭意義.回應長度控制在100字以內,"
+    
 
-    response4mini = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": promptForSystem},
-            {"role": "user", "content": prompt}
-        ],
-        max_tokens=1000
-    )
 
     response5mini = client.chat.completions.create(
         model="gpt-5-mini",
         messages=[
-            {"role": "system", "content": promptForSystem},
+            {"role": "system", "content": promptForSystem5mini},
             {"role": "user", "content": prompt}
         ],
-        max_completion_tokens=3000
+        max_completion_tokens=3500
     )
 
     response5nano = client.chat.completions.create(
         model="gpt-5-nano",
         messages=[
-            {"role": "system", "content": promptForSystem},
+            {"role": "system", "content": promptForSystem5mini},
             {"role": "user", "content": prompt}
         ],
-        max_completion_tokens=5000
+        max_completion_tokens=6000
     )
+    promptForSystem4o = "你是一個易經老師,請整合用戶提供的所有情報,彙整一合理的預測提供給使用者"
+    promptUser4o = promptCore + response5mini.choices[0].message.content + "請根據以上情報提供1000字內建議."
+
+    response4mini = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": promptForSystem4o},
+            {"role": "user", "content": promptUser4o}
+        ],
+        max_tokens=1500
+    )
+
 
     reply4mini = response4mini.choices[0].message.content
     usage4mini = response4mini.usage
