@@ -95,8 +95,6 @@ Based on classification:\
   Example response: '建議: In this situation, maintain patience like the mountain hexagram advises, and seek balance."
 
     promptForSystem5mini = "你是一個易經大師,先分析用戶問題,如果是問特定人事時地物,請以條列式精簡列出各掛辭爻辭對應該問題的隱含意義,最後以一句話總結,如果是問建議,無須條列掛辭意義.回應長度控制在100字以內,"
-    
-
 
     response5mini = client.chat.completions.create(
         model="gpt-5-mini",
@@ -106,16 +104,21 @@ Based on classification:\
         ],
         max_completion_tokens=3500
     )
+
+
+    #GROK
     clientgrok = Client(
     api_key=os.getenv("XAI_API_KEY"),
-    timeout=3600, # Override default timeout with longer timeout for reasoning models
+    timeout=7200, # Override default timeout with longer timeout for reasoning models
     )
-
-    chat = clientgrok.chat.create(model="grok-4-fast-reasoning")
-    chat.append(system(promptForSystem))
-    chat.append(user(prompt))
-    responsegrok4FR = chat.sample()
-
+    grokChat = clientgrok.chat.create(model="grok-4-fast-reasoning")
+    grokChat.append(system(promptForSystem5mini))
+    grokChat.append(user(prompt))
+    responsegrok4FR = grokChat.sample()
+    #response.reasoning_content
+    #response.content
+    #response.usage.completion_tokens
+    #response.usage.reasoning_tokens
 
     promptForSystem4o = "你是一個易經老師,請整合用戶提供的所有情報,彙整一合理的預測提供給使用者"
     promptUser4o = promptCore + response5mini.choices[0].message.content + "請根據以上情報提供1000字內建議."
@@ -140,6 +143,10 @@ Based on classification:\
     prompt_tokens5mini = usage5mini.prompt_tokens
     completion_tokens5mini = usage5mini.completion_tokens
 
+    replygrok4FR = responsegrok4FR.content
+    prompt_tokensgrok4FR = responsegrok4FR.usage.prompt_tokens
+    completion_tokensgrok4FR = responsegrok4FR.usage.completion_tokens + responsegrok4FR.usage.reasoning_tokens
+
     
     
     return jsonify({
@@ -157,12 +164,12 @@ Based on classification:\
             "completion_tokens": completion_tokens5mini,
             "costper1K" : ((prompt_tokens5mini*0.25+completion_tokens5mini*2)/1000)
             },
-        "answergrok4FR": responsegrok4FR,
+        "answergrok4FR": replygrok4FR,
         "usagegrok4FR": 
             {
-            "prompt_tokens",
-            "completion_tokens",
-            "costper1K"             
+            "prompt_tokens" : prompt_tokensgrok4FR,
+            "completion_tokens": completion_tokensgrok4FR,
+            "costper1K" : ((prompt_tokensgrok4FR*0.2+completion_tokensgrok4FR*0.5)/1000)            
             }
         })
 
