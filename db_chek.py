@@ -87,11 +87,11 @@ def AI_write_hexagram_5_hints(hexid):
                 object_hint = ?
             WHERE hexagram_id = ? AND position_num = ?;
         """, (
-            hints["人"],
-            hints["事"],
-            hints["時"],
-            hints["地"],
-            hints["物"],
+            hints["可能是什麼樣的人"],
+            hints["可能發生什麼樣的事"],
+            hints["可能是什麼時候或需要經過多久"],
+            hints["可能是哪裡或可能是哪個方位"],
+            hints["可能是什麼東西"],
             hexid,
             position_num
         ))
