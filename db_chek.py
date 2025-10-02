@@ -64,18 +64,18 @@ def AI_write_hexagram_5_hints(hexid):
             prompt = f"爻辭：「{text}」\n請回覆此爻辭對「{hint_type}」的意義。"
 
             response = client.chat.completions.create(
-                model="gpt-5-mini",
+                model="gpt-5",
                 messages=[
                     {
                         "role": "system",
-                        "content": "你是一個易經大師，正在協助學生整理爻辭對於要預測:可能是什麼樣的人,可能是什麼樣的事情,可能是什麼時間或需要多少時間,可能是什麼地方或什麼方向,可能是什麼東西的提示，請只回復提示，控制在15字以內。"
+                        "content": "你是一位精通《易經》與《十翼》的大師，專責將卦辭與爻辭轉換為「提示詞」。輸出規則：1.僅輸出提示詞，不要解釋。2. 提示詞必須具象但帶有象徵性（如:長者,高階管理人,小商販,謹慎之人 或 難題,突破,驚喜,分離,雨降  或 數天,數周,春天,下半年,第一季 或 東方,高處,隱藏之處,水流之處 或 石頭,繩索,車輛,箱子 ）。3. 提供最多四個提示,不要換行。 4. 不要加任何前綴或後綴，只輸出提示詞本身。"
                     },
                     {"role": "user", "content": prompt}
                 ],
-                max_completion_tokens=3000
+                max_completion_tokens=5000
             )
             hints[hint_type] = response.choices[0].message.content.strip()
-            print(response.choices[0].message.content.strip())
+            print("prompt= "+ prompt + "\n" + "Response:" +response.choices[0].message.content.strip() + "Usage : completion_token," + str(response.usage.completion_tokens) + " / prompt_token,"+ str(response.usage.prompt_tokens))
 
         # 更新寫入 DB
         cursor.execute("""
@@ -105,8 +105,8 @@ def AI_write_hexagram_5_hints(hexid):
 TA = "hexagrams"
 TB = "lines"
 #db_get_table()
-#db_pull_rows(300,TB)
+db_pull_rows(300,TB)
 #db_pull_hex_by_id(10)
 #db_pull_lines_by_hexid(29)
-AI_write_hexagram_5_hints(29)
+#AI_write_hexagram_5_hints(29)
 
