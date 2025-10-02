@@ -2,6 +2,8 @@ import pandas as pd
 import sqlite3
 import os
 from openai import OpenAI
+from xai_sdk import Client
+from xai_sdk.chat import user, system
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -57,25 +59,21 @@ def AI_write_hexagram_5_hints(hexid):
         ORDER BY position_num
     """, (hexid,))
     lines_text = cursor.fetchall()
+    system_prompt = "你是一位精通《易經》與《十翼》的大師，專責將卦辭與爻辭轉換為「提示詞」。輸出規則：1.僅輸出提示詞，不要解釋。 2. 當爻辭沒有關聯提示涵義時，僅回覆「沒有」。3. 提示詞必須帶有象徵性描述（如:年長者,高階管理人,謹慎之人 或 難題,突破,驚喜,分離,雨降  或 數天,數周,春天,下半年,第一季 或 高處,隱藏之處,水流之處 或 堅硬之物,繩索,移動物,箱子 ）。 4. 提供最多四個提示,不要換行。 5. 不要加任何前綴或後綴，只輸出提示詞本身。"
 
     for position_num, text in lines_text:
         hints = {}
-        for hint_type in ["可能是什麼樣的人", "可能發生什麼樣的事", "可能是什麼時候或需要經過多久", "可能是哪裡或可能是哪個方位", "可能是什麼東西"]:
+        for hint_type in ["可能是什麼樣的人", "可能發生什麼樣的事", "可能是什麼時候或需要經過多久", "可能是什麼樣的地方", "可能是什麼東西"]:
             prompt = f"爻辭：「{text}」\n請回覆此爻辭對「{hint_type}」的意義。"
-
-            response = client.chat.completions.create(
-                model="gpt-5",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "你是一位精通《易經》與《十翼》的大師，專責將卦辭與爻辭轉換為「提示詞」。輸出規則：1.僅輸出提示詞，不要解釋。2. 提示詞必須具象但帶有象徵性（如:長者,高階管理人,小商販,謹慎之人 或 難題,突破,驚喜,分離,雨降  或 數天,數周,春天,下半年,第一季 或 東方,高處,隱藏之處,水流之處 或 石頭,繩索,車輛,箱子 ）。3. 提供最多四個提示,不要換行。 4. 不要加任何前綴或後綴，只輸出提示詞本身。"
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                max_completion_tokens=5000
-            )
-            hints[hint_type] = response.choices[0].message.content.strip()
-            print("prompt= "+ prompt + "\n" + "Response:" +response.choices[0].message.content.strip() + "Usage : completion_token," + str(response.usage.completion_tokens) + " / prompt_token,"+ str(response.usage.prompt_tokens))
+            clientgrok = Client(api_key=os.getenv("XAI_API_KEY"),
+                                timeout=7200, # Override default timeout with longer timeout for reasoning models
+                    )
+            grokChat = clientgrok.chat.create(model="grok-4-fast-reasoning")
+            grokChat.append(system(system_prompt))
+            grokChat.append(user(prompt))
+            responsegrok4FR = grokChat.sample()
+            hints[hint_type] = responsegrok4FR.content.strip()
+            print("prompt= "+ prompt + "\n" + "Response:" +responsegrok4FR.content.strip())
 
         # 更新寫入 DB
         cursor.execute("""
@@ -90,7 +88,7 @@ def AI_write_hexagram_5_hints(hexid):
             hints["可能是什麼樣的人"],
             hints["可能發生什麼樣的事"],
             hints["可能是什麼時候或需要經過多久"],
-            hints["可能是哪裡或可能是哪個方位"],
+            hints["可能是什麼樣的地方"],
             hints["可能是什麼東西"],
             hexid,
             position_num
@@ -105,8 +103,8 @@ def AI_write_hexagram_5_hints(hexid):
 TA = "hexagrams"
 TB = "lines"
 #db_get_table()
-db_pull_rows(300,TB)
+#db_pull_rows(300,TB)
 #db_pull_hex_by_id(10)
 #db_pull_lines_by_hexid(29)
-#AI_write_hexagram_5_hints(29)
-
+for hexid in range(1, 65):
+    AI_write_hexagram_5_hints(hexid)
