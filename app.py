@@ -85,13 +85,12 @@ def ask():
     prompt_no_hint += "請根據以上資料, 根據使用者問題類別，請使用500字說明掛辭爻辭與問題的連結後，幫使用者統整可能的預測或建議。"
     #prompt_no_hint + 爻辭 => 爻辭來自lines_text
     #sysprompt_no_hint => 給grok做分析用, 不給提示辭
-    sysprompt_no_hint = """
-    你是一個親切的易經大師,精通周易和十翼。
+    sysprompt_no_hint = """你是一個親切的易經大師,精通周易和十翼。
     首先分析用戶的需求是以下哪一種: 
     1:什麼類型的人,誰會出現,什麼樣的人格,或類似人物特質/身份=Who
     2:可能碰到什麼狀況,會發生什麼事,什麼事件,或類似情境/發展=What Event
-    3:什麼時間,何時發生,最佳時機或類似時序/日期=When
-    4:什麼地方,在哪裡,地點相關或類似位置/環境=Where
+    3:什麼時間,何時發生,多少時長,多久,最佳時機或類似時序/日期=When
+    4:什麼地方,在哪裡,地點相關,往哪個方想或類似位置/環境=Where
     5:什麼東西,物件/物品,象徵物或類似實體/道具=What thing 
     6:好不好,可不可以,能不能=good or bad
     7:怎麼做,怎麼辦,如何進行=Advice 
@@ -99,18 +98,20 @@ def ask():
     - If who/what event/when/where/what thing : 提供具體對猜測
         Example response: 'The person (who) is likely a mentor figure, represented by the strong yang lines.'
     - If good or bad , Advice: Offer general guidance, suggestions, or reflections based on the hexagram's wisdom. Encourage positive actions.
-        Example response: '建議: In this situation, maintain patience like the mountain hexagram advises, and seek balance."""
+        Example response: '建議: In this situation, maintain patience like the mountain hexagram advises, and seek balance.
+    限制500字以內.
+    """
     #System prompt for output hint grok4FR
     sysprompt_f_Q_define = """你是一位精準的問題分類專家，專門分析使用者詢問的內容，僅用於命理或塔羅相關的回應生成。
         請仔細閱讀使用者問題，然後根據以下規則嚴格分類，只輸出單一關鍵字作為回應，絕對不得添加任何額外解釋、文字或符號：
-        如果問題詢問'什麼類型的人'、'誰會出現'、'什麼樣的人格'或類似人物特質/身份，輸出：person_hint
-        如果問題詢問'可能碰到什麼狀況'、'會發生什麼事'、'什麼事件'或類似情境/發展，輸出：event_hint
-        如果問題詢問'什麼時間'、'何時發生'、'最佳時機'或類似時序/日期，輸出：time_hint
-        如果問題詢問'什麼地方'、'在哪裡'、'地點相關'或類似位置/環境，輸出：place_hint
-        如果問題詢問'什麼東西'、'物件/物品'、'象徵物'或類似實體/道具，輸出：object_hint
-        如果問題明確要求'建議'、'怎麼做'、'該如何'或類似指導/行動，輸出：ADVICE
-        如果問題詢問'吉凶'、'好壞'、'運勢判斷'或類似預測結果，輸出：吉凶
-        強制只輸出以上單一關鍵字：person_hint、event_hint、time_hint、place_hint、object_hint、ADVICE 或 吉凶。無匹配則默認輸出：ADVICE"""
+        如果問題詢問:什麼類型的人,誰會出現,什麼樣的人格或類似人物特質/身份,輸出:person_hint
+        如果問題詢問:可能碰到什麼狀況'、'會發生什麼事.什麼事件'或類似情境/發展,輸出:event_hint
+        如果問題詢問:什麼時間,何時發生,最佳時機,時間長度,多久,或類似時序/日期,輸出:time_hint
+        如果問題詢問:什麼地方,在哪裡,往哪邊,去哪邊,地點相關,或類似位置/環境,輸出:place_hint
+        如果問題詢問:什麼東西,物件/物品,象徵物或類似實體/道具,輸出:object_hint
+        如果問題明確要求:建議,怎麼做,該如何或類似指導/行動,輸出:ADVICE
+        如果問題詢問:吉凶,好壞,運勢判斷,或類似預測結果，輸出：吉凶
+        強制只輸出以上單一關鍵字:person_hint、event_hint、time_hint、place_hint、object_hint、ADVICE 或 吉凶。無匹配則默認輸出:ADVICE"""
 
     
     clientgrok = Client(
@@ -152,19 +153,19 @@ def ask():
     responsegrok4FR = grokChat.sample()
 
     system_prompts4o = {
-    "person_hint": "你是一個易經老師，專注於解釋卦象所隱含的人物特質，請用戶能理解他會遇到什麼樣的人。",
-    "event_hint": "你是一個易經老師，專注於解釋卦象所隱含的事件或狀況，請描述可能會發生什麼事情。",
-    "time_hint": "你是一個易經老師，專注於解釋卦象所隱含的時間意義，請預測事件可能的時間點或時長。",
-    "place_hint": "你是一個易經老師，專注於解釋卦象所隱含的地點與方向，請指出可能發生的場所或方位。",
-    "object_hint": "你是一個易經老師，專注於解釋卦象所隱含的事物或結果，請指出可能的事物或成果。",
-    "ADVICE": "你是一個易經老師，專注於給予正向建議，請根據卦象幫助使用者找到適當的行動方向。",
-    "吉凶": "你是一個易經老師，專注於判斷吉凶，請根據卦象說明結果偏向吉或凶。"
+    "person_hint": "你是一個親切的易經大師，專注於解釋卦象所隱含的人物特質，請用戶能理解他會遇到什麼樣的人。",
+    "event_hint": "你是一個親切的易經大師，專注於解釋卦象所隱含的事件或狀況，請描述可能會發生什麼事情。",
+    "time_hint": "你是一個親切的易經大師，專注於解釋卦象所隱含的時間意義，請預測事件可能的時間點或時長。",
+    "place_hint": "你是一個親切的易經大師，專注於解釋卦象所隱含的地點與方向，請指出可能發生的場所或方位。",
+    "object_hint": "你是一個親切的易經大師，專注於解釋卦象所隱含的事物或結果，請指出可能的事物或成果。",
+    "ADVICE": "你是一個親切的易經大師，專注於給予正向建議，請根據卦象幫助使用者找到適當的行動方向。",
+    "吉凶": "你是一個親切的易經大師，專注於判斷吉凶，請根據卦象說明結果偏向吉或凶。"
     }
 
     system_prompt4o = system_prompts4o.get(hint_type, "你是一個易經老師，請根據卦象提供解釋。")
 
     if hint_type in valid_hints:  # 人事時地物
-        user_prompt4o = prompt_w_hint + f"\n請根據以上卦象,爻辭與各爻辭的hint內容,針對 {hint_type} 做出800字內合理的預測。"
+        user_prompt4o = prompt_w_hint + f"\n請根據以上卦象,爻辭與各爻辭的hint內容,針對 {hint_type} 做出800字內合理的預測。如果hint內容裡沒有明確方位與時間,則以卦象為準，避免混亂。"
     elif hint_type == "ADVICE":
         user_prompt4o = prompt_no_hint + "\n請根據卦象與爻辭提供具體的800字內建議,幫助使用者做決策。"
     elif hint_type == "吉凶":
