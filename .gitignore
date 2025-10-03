@@ -9,3 +9,6 @@ venv/
 
 # Secret files
 .env
+
+#damn
+flutter/

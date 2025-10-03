@@ -106,8 +106,9 @@ def AI_write_hexagram_5_hints(hexid):
 TA = "hexagrams"
 TB = "lines"
 #db_get_table()
-#db_pull_rows(300,TB)
+#db_pull_rows(387,TB)
 #db_pull_hex_by_id(10)
 #db_pull_lines_by_hexid(29)
 for hexid in range(38, 65):
+    break
     AI_write_hexagram_5_hints(hexid)
