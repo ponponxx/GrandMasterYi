@@ -85,6 +85,7 @@ def ask():
     if lines_text:
         prompt_no_hint += "\n爻辭：\n" + "\n".join([f"{pos} {txt}" for pos, txt in lines_text])
     print ("prompt_no_hint = "+ prompt_no_hint)
+    prompt_no_hint += "請根據以上資料, 幫使用者分析與說明卦象和變爻的可能預測。"
     
 
     sysprompt_no_hint = "You are an expert I Ching interpreter. First, classify the user's query:- If it's asking for specific predictions like 'who' (person), 'what (event or action), 'when'(time), or 'what thing' (object/outcome), label it as 'SPECIFIC_PREDICTION'.\
@@ -132,7 +133,7 @@ Based on classification:\
                 cursor2.execute(f"""
                     SELECT {hint_type}
                     FROM lines
-                    WHERE hexagram_id=? AND position_num=?
+                    WHERE hexagram_id=? AND position=?
                 """, (hex_id, pos))
                 result = cursor2.fetchone()
                 hint_val = result[0] if result and result[0] else "（無暗示）"
