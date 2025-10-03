@@ -89,7 +89,7 @@ def ask():
             ],
             stream=True,
             max_tokens=1000
-        )
+            )
         for chunk in stream:
             if len(chunk.choices) > 0:
                 delta = chunk.choices[0].delta.content or ""
