@@ -164,11 +164,11 @@ def ask():
     system_prompt4o = system_prompts4o.get(hint_type, "你是一個易經老師，請根據卦象提供解釋。")
 
     if hint_type in valid_hints:  # 人事時地物
-        user_prompt4o = prompt_w_hint + f"\n請根據以上資訊，針對 {hint_type} 做出800字內合理的預測。"
+        user_prompt4o = prompt_w_hint + f"\n請根據以上卦象,爻辭與各爻辭的hint內容,針對 {hint_type} 做出800字內合理的預測。"
     elif hint_type == "ADVICE":
-        user_prompt4o = prompt_no_hint + "\n請根據卦象提供具體的800字內建議，幫助使用者做決策。"
+        user_prompt4o = prompt_no_hint + "\n請根據卦象與爻辭提供具體的800字內建議,幫助使用者做決策。"
     elif hint_type == "吉凶":
-        user_prompt4o = prompt_no_hint + "\n請根據卦象與爻辭，判斷結果偏向吉或凶，並800字內簡短說明理由。"
+        user_prompt4o = prompt_no_hint + "\n請根據卦象與爻辭,判斷結果偏向吉或凶,並800字內簡短說明理由。"
 
     response4mini = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -198,7 +198,7 @@ def ask():
             "prompt_tokens": prompt_tokens4mini,
             "completion_tokens": completion_tokens4mini,
             "costper1K" : ((prompt_tokens4mini*0.15+completion_tokens4mini*0.06)/1000),
-            "info" : "systpromt=" + promptForSystem4o + "\nUserprompt = " + prompt_w_hint
+            "info" : "systpromt=" + system_prompt4o + "\nUserprompt = " + user_prompt4o
             },
         "answergrok4FR": replygrok4FR,
         "usagegrok4FR": 
