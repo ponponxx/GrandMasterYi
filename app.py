@@ -40,14 +40,14 @@ def ask():
     for i, val in enumerate(throws):
         if val == 6:  # 老陰
             binary_list.append("0")
-            changing_lines.append(i)
+            changing_lines.append(i+1)
         elif val == 7:  # 少陽
             binary_list.append("1")
         elif val == 8:  # 少陰
             binary_list.append("0")
         elif val == 9:  # 老陽
             binary_list.append("1")
-            changing_lines.append(i)
+            changing_lines.append(i+1)
 
     binary_code = "".join(binary_list[::-1])
     
@@ -61,7 +61,7 @@ def ask():
         return jsonify({"error": "Invalid hexagram"}), 400
 
     hex_id, hex_name, judgment = hexagram
-
+    #第幾掛,卦象,掛辭
     lines_text = []
     if changing_lines:
         qmarks = ",".join("?" * len(changing_lines))
@@ -70,7 +70,9 @@ def ask():
             [hex_id] + changing_lines
         )
     lines_text = cursor.fetchall()
+    #變爻
     conn.close()
+    
     
     # ---- 組 Prompt ----
     promptCore = f"""使用者：{user_name}
@@ -78,11 +80,14 @@ def ask():
     本卦：{hex_name}
     卦辭：{judgment}
     變爻：{changing_lines if changing_lines else "無"}"""
+    prompt_no_hint = promptCore
+    prompt_w_hint = promptCore
     if lines_text:
-        promptCore += "\n爻辭：\n" + "\n".join([f"{pos} {txt}" for pos, txt in lines_text])
-    prompt = promptCore+"請根據以上資訊，進行500字占卜說明。"
+        prompt_no_hint += "\n爻辭：\n" + "\n".join([f"{pos} {txt}" for pos, txt in lines_text])
+    print ("prompt_no_hint = "+ prompt_no_hint)
+    
 
-    promptForSystem = "You are an expert I Ching interpreter. First, classify the user's query:- If it's asking for specific predictions like 'who' (person), 'what (event or action), 'when'(time), or 'what thing' (object/outcome), label it as 'SPECIFIC_PREDICTION'.\
+    sysprompt_no_hint = "You are an expert I Ching interpreter. First, classify the user's query:- If it's asking for specific predictions like 'who' (person), 'what (event or action), 'when'(time), or 'what thing' (object/outcome), label it as 'SPECIFIC_PREDICTION'.\
     - If it's asking for general advice, guidance, or suggestions based on the hexagram, label it as 'ADVICE'.\
     Examples:\
     - Query: 'What will happen in my career next month?' → SPECIFIC_PREDICTION (what/when)- Query: 'Give me advice on my relationship.' → ADVICE\
@@ -94,34 +99,60 @@ Based on classification:\
 - If ADVICE: Offer general guidance, suggestions, or reflections based on the hexagram's wisdom. Encourage positive actions.\
   Example response: '建議: In this situation, maintain patience like the mountain hexagram advises, and seek balance."
 
-    promptForSystem5mini = "你是一個易經大師,先分析用戶問題,如果是問特定人事時地物,請以條列式精簡列出各掛辭爻辭對應該問題的隱含意義,最後以一句話總結,如果是問建議,無須條列掛辭意義.回應長度控制在100字以內,"
+    sysprompt_f_Q_define = "你是一位精準的問題分類專家，專門分析使用者詢問的內容，僅用於命理或塔羅相關的回應生成。請仔細閱讀使用者問題，然後根據以下規則嚴格分類，只輸出單一關鍵字作為回應，絕對不得添加任何額外解釋、文字或符號：\
+如果問題詢問'什麼類型的人'、'誰會出現'、'什麼樣的人格'或類似人物特質/身份，輸出：person_hint\
+如果問題詢問'可能碰到什麼狀況'、'會發生什麼事'、'什麼事件'或類似情境/發展，輸出：event_hint\
+如果問題詢問'什麼時間'、'何時發生'、'最佳時機'或類似時序/日期，輸出：time_hint\
+如果問題詢問'什麼地方'、'在哪裡'、'地點相關'或類似位置/環境，輸出：place_hint\
+如果問題詢問'什麼東西'、'物件/物品'、'象徵物'或類似實體/道具，輸出：object_hint\
+如果問題明確要求'建議'、'怎麼做'、'該如何'或類似指導/行動，輸出：ADVICE\
+如果問題詢問'吉凶'、'好壞'、'運勢判斷'或類似預測結果，輸出：吉凶\
+強制只輸出以上單一關鍵字：person_hint、event_hint、time_hint、place_hint、object_hint、ADVICE 或 吉凶。無匹配則默認輸出：ADVICE"
 
-    response5mini = client.chat.completions.create(
-        model="gpt-5-mini",
-        messages=[
-            {"role": "system", "content": promptForSystem5mini},
-            {"role": "user", "content": prompt}
-        ],
-        max_completion_tokens=3500
-    )
-
-
-    #GROK
+    #promptForSystem5mini = "你是一個易經大師,先分析用戶問題,如果是問特定人事時地物,請以條列式精簡列出各掛辭爻辭對應該問題的隱含意義,最後以一句話總結,如果是問建議,無須條列掛辭意義.回應長度控制在100字以內,"
     clientgrok = Client(
     api_key=os.getenv("XAI_API_KEY"),
     timeout=7200, # Override default timeout with longer timeout for reasoning models
     )
-    grokChat = clientgrok.chat.create(model="grok-4-fast-reasoning")
-    grokChat.append(system(promptForSystem5mini))
-    grokChat.append(user(prompt))
-    responsegrok4FR = grokChat.sample()
-    #response.reasoning_content
-    #response.content
-    #response.usage.completion_tokens
-    #response.usage.reasoning_tokens
 
-    promptForSystem4o = "你是一個易經老師,請整合用戶提供的所有情報,彙整一合理的預測提供給使用者"
-    promptUser4o = promptCore + response5mini.choices[0].message.content + "請根據以上情報提供1000字內建議."
+    #GROK4FRtoJudgeQuestionMeaning:
+    grokChatQdefine = clientgrok.chat.create(model="grok-4-fast-reasoning")
+    grokChatQdefine.append(system(sysprompt_f_Q_define))
+    grokChatQdefine.append(user(question))
+    responsegrokQDefine = grokChatQdefine.sample()
+    
+    valid_hints = ["person_hint", "event_hint", "time_hint", "place_hint", "object_hint"]
+    hint_type = responsegrokQDefine.content.strip()
+    conn2 = sqlite3.connect("iching.db")
+    cursor2 = conn2.cursor()
+    if lines_text:
+        if hint_type in valid_hints:   # ✅ 只在這五類時才去撈暗示
+            hints = []
+            for pos, txt in lines_text:
+                cursor2.execute(f"""
+                    SELECT {hint_type}
+                    FROM lines
+                    WHERE hexagram_id=? AND position_num=?
+                """, (hex_id, pos))
+                result = cursor2.fetchone()
+                hint_val = result[0] if result and result[0] else "（無暗示）"
+                hints.append(f"{pos} {txt} → 暗示: {hint_val}")
+            prompt_w_hint += "\n爻辭：\n" + "\n".join(hints)
+        else:
+            # 如果 hint_type 是 ADVICE / 吉凶 → 只加爻辭，不加暗示
+            prompt_w_hint += "\n爻辭：\n" + "\n".join([f"{pos} {txt}" for pos, txt in lines_text])
+    conn2.close()
+    
+    #GROK
+    grokChat = clientgrok.chat.create(model="grok-4-fast-reasoning")
+    grokChat.append(system(sysprompt_no_hint))
+    grokChat.append(user(prompt_no_hint))
+    responsegrok4FR = grokChat.sample()
+
+
+
+    promptForSystem4o = "你是一個易經老師,請根據hint_type與用戶提供的所有資訊,彙整一合理的預測提供給使用者。 hint_type = " + hint_type
+    promptUser4o = prompt_w_hint + "請根據以上情報提供1000字內建議."
 
     response4mini = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -138,11 +169,6 @@ Based on classification:\
     prompt_tokens4mini = usage4mini.prompt_tokens
     completion_tokens4mini = usage4mini.completion_tokens
 
-    reply5mini = response5mini.choices[0].message.content
-    usage5mini = response5mini.usage
-    prompt_tokens5mini = usage5mini.prompt_tokens
-    completion_tokens5mini = usage5mini.completion_tokens
-
     replygrok4FR = responsegrok4FR.content
     prompt_tokensgrok4FR = responsegrok4FR.usage.prompt_tokens
     completion_tokensgrok4FR = responsegrok4FR.usage.completion_tokens + responsegrok4FR.usage.reasoning_tokens
@@ -155,21 +181,16 @@ Based on classification:\
             {
             "prompt_tokens": prompt_tokens4mini,
             "completion_tokens": completion_tokens4mini,
-            "costper1K" : ((prompt_tokens4mini*0.15+completion_tokens4mini*0.06)/1000)
-            },
-        "answer5mini": reply5mini,
-        "usage5mini": 
-            {
-            "prompt_tokens": prompt_tokens5mini,
-            "completion_tokens": completion_tokens5mini,
-            "costper1K" : ((prompt_tokens5mini*0.25+completion_tokens5mini*2)/1000)
+            "costper1K" : ((prompt_tokens4mini*0.15+completion_tokens4mini*0.06)/1000),
+            "info" : prompt_w_hint
             },
         "answergrok4FR": replygrok4FR,
         "usagegrok4FR": 
             {
             "prompt_tokens" : prompt_tokensgrok4FR,
             "completion_tokens": completion_tokensgrok4FR,
-            "costper1K" : ((prompt_tokensgrok4FR*0.2+completion_tokensgrok4FR*0.5)/1000)            
+            "costper1K" : ((prompt_tokensgrok4FR*0.2+completion_tokensgrok4FR*0.5)/1000),        
+            "info" : hint_type
             }
         })
 

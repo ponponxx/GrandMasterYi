@@ -31,10 +31,6 @@
   <div>
     <h3>gpt-4o-mini</h3>
     <div id="result4mini" class="result"></div>
-
-    <h3>gpt-5-mini</h3>
-    <div id="result5mini" class="result"></div>
-
     <h3>grok4FR</h3>
     <div id="resultgrok4FR" class="result"></div>
   </div>
@@ -64,18 +60,14 @@
       });
       const data = await response.json();
 
-      // 把結果填到三個區塊
+      // 把結果填到兩個區塊
       document.getElementById("result4mini").innerText =
         data.answer4mini + "\n\nTokens: prompt=" + data.usage4mini.prompt_tokens +
-        ", completion=" + data.usage4mini.completion_tokens+", cost/1K="+data.usage4mini.costper1K;
-
-      document.getElementById("result5mini").innerText =
-        data.answer5mini + "\n\nTokens: prompt=" + data.usage5mini.prompt_tokens +
-        ", completion=" + data.usage5mini.completion_tokens+", cost/1K="+data.usage5mini.costper1K;
+        ", completion=" + data.usage4mini.completion_tokens+", cost/1K="+data.usage4mini.costper1K + ",info = "+data.usage4mini.info;
 
       document.getElementById("resultgrok4FR").innerText =
         data.answergrok4FR + "\n\nTokens: prompt=" + data.usagegrok4FR.prompt_tokens +
-        ", completion=" + data.usagegrok4FR.completion_tokens+", cost/1K="+data.usagegrok4FR.costper1K;
+        ", completion=" + data.usagegrok4FR.completion_tokens+", cost/1K="+data.usagegrok4FR.costper1K + ",info = "+data.usagegrok4FR.info;
     }
 
     function randomHexagram() {

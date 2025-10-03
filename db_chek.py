@@ -1,6 +1,7 @@
 import pandas as pd
 import sqlite3
 import os
+import time
 from openai import OpenAI
 from xai_sdk import Client
 from xai_sdk.chat import user, system
@@ -47,6 +48,7 @@ def db_pull_hex_by_id(num):
 
 
 def AI_write_hexagram_5_hints(hexid):
+    start = time.time()
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     conn = sqlite3.connect("iching.db")
     cursor = conn.cursor()
@@ -96,7 +98,8 @@ def AI_write_hexagram_5_hints(hexid):
 
     conn.commit()
     conn.close()
-    print(f"✅ 已完成 hexagram_id={hexid} 的 6 爻人事時地物寫入")
+    end = time.time()
+    print(f"✅ 已完成 hexagram_id={hexid} 的 6 爻人事時地物寫入"+"總耗時 : " + f"{end - start:.2f} sec")
 
     return
 
@@ -106,5 +109,5 @@ TB = "lines"
 #db_pull_rows(300,TB)
 #db_pull_hex_by_id(10)
 #db_pull_lines_by_hexid(29)
-for hexid in range(1, 65):
+for hexid in range(38, 65):
     AI_write_hexagram_5_hints(hexid)
