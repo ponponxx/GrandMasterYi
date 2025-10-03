@@ -86,19 +86,19 @@ def ask():
     #prompt_no_hint + 爻辭 => 爻辭來自lines_text
     #sysprompt_no_hint => 給grok做分析用, 不給提示辭
     sysprompt_no_hint = """
-    You are an expert I Ching interpreter. 
-    First, classify the user's query:
-    - If it's asking for specific predictions like 'who' (person), 'what (event or action), 'when'(time), or ' what kind of place' or'what thing' (object/outcome), label it as 'SPECIFIC_PREDICTION'.
-    - If it's asking for general advice, guidance, or suggestions based on the hexagram, label it as 'ADVICE'.
-    Examples:
-    - Query: 'What will happen in my career next month?' → SPECIFIC_PREDICTION (what/when)
-    - Query: 'Give me advice on my relationship.' → ADVICE
-    - Query: 'Who is the person I'll meet soon?' → SPECIFIC_PREDICTION (who)
-    - Query: 'How should I handle this situation?' → ADVICE.
+    你是一個親切的易經大師,精通周易和十翼。
+    首先分析用戶的需求是以下哪一種: 
+    1:什麼類型的人,誰會出現,什麼樣的人格,或類似人物特質/身份=Who
+    2:可能碰到什麼狀況,會發生什麼事,什麼事件,或類似情境/發展=What Event
+    3:什麼時間,何時發生,最佳時機或類似時序/日期=When
+    4:什麼地方,在哪裡,地點相關或類似位置/環境=Where
+    5:什麼東西,物件/物品,象徵物或類似實體/道具=What thing 
+    6:好不好,可不可以,能不能=good or bad
+    7:怎麼做,怎麼辦,如何進行=Advice 
     Based on classification:
-    - If SPECIFIC_PREDICTION: Provide a direct, factual interpretation tied to the query's focus (who/what/when/where/thing). 參考十翼資料加強準度.
+    - If who/what event/when/where/what thing : 提供具體對猜測
         Example response: 'The person (who) is likely a mentor figure, represented by the strong yang lines.'
-    - If ADVICE: Offer general guidance, suggestions, or reflections based on the hexagram's wisdom. Encourage positive actions.
+    - If good or bad , Advice: Offer general guidance, suggestions, or reflections based on the hexagram's wisdom. Encourage positive actions.
         Example response: '建議: In this situation, maintain patience like the mountain hexagram advises, and seek balance."""
     #System prompt for output hint grok4FR
     sysprompt_f_Q_define = """你是一位精準的問題分類專家，專門分析使用者詢問的內容，僅用於命理或塔羅相關的回應生成。
@@ -151,16 +151,30 @@ def ask():
     grokChat.append(user(prompt_no_hint))
     responsegrok4FR = grokChat.sample()
 
+    system_prompts4o = {
+    "person_hint": "你是一個易經老師，專注於解釋卦象所隱含的人物特質，請用戶能理解他會遇到什麼樣的人。",
+    "event_hint": "你是一個易經老師，專注於解釋卦象所隱含的事件或狀況，請描述可能會發生什麼事情。",
+    "time_hint": "你是一個易經老師，專注於解釋卦象所隱含的時間意義，請預測事件可能的時間點或時長。",
+    "place_hint": "你是一個易經老師，專注於解釋卦象所隱含的地點與方向，請指出可能發生的場所或方位。",
+    "object_hint": "你是一個易經老師，專注於解釋卦象所隱含的事物或結果，請指出可能的事物或成果。",
+    "ADVICE": "你是一個易經老師，專注於給予正向建議，請根據卦象幫助使用者找到適當的行動方向。",
+    "吉凶": "你是一個易經老師，專注於判斷吉凶，請根據卦象說明結果偏向吉或凶。"
+    }
 
+    system_prompt4o = system_prompts4o.get(hint_type, "你是一個易經老師，請根據卦象提供解釋。")
 
-    promptForSystem4o = "你是一個易經老師,請根據hint_type與用戶提供的所有資訊,彙整一合理的預測提供給使用者。 hint_type = " + hint_type
-    promptUser4o = prompt_w_hint + "請根據以上情報提供1000字內建議."
+    if hint_type in valid_hints:  # 人事時地物
+        user_prompt4o = prompt_w_hint + f"\n請根據以上資訊，針對 {hint_type} 做出800字內合理的預測。"
+    elif hint_type == "ADVICE":
+        user_prompt4o = prompt_no_hint + "\n請根據卦象提供具體的800字內建議，幫助使用者做決策。"
+    elif hint_type == "吉凶":
+        user_prompt4o = prompt_no_hint + "\n請根據卦象與爻辭，判斷結果偏向吉或凶，並800字內簡短說明理由。"
 
     response4mini = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": promptForSystem4o},
-            {"role": "user", "content": promptUser4o}
+            {"role": "system", "content": system_prompt4o},
+            {"role": "user", "content": user_prompt4o}
         ],
         max_tokens=1500
     )
