@@ -3,3 +3,7 @@ gunicorn
 openai
 python-dotenv
 xai_sdk
+google-auth
+pyjwt
+cryptography
+requests
