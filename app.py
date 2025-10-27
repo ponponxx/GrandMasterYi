@@ -73,6 +73,7 @@ def fake_login():
 @app.route("/ask", methods=["POST"])
 def ask():
 
+    ###############################################
     #這段作驗證的啦!
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
@@ -84,6 +85,8 @@ def ask():
         return jsonify({"error": "invalid or expired token"}), 401
     # ✅ 通過驗證後，你就知道是誰在問問題
     print(f"使用者 {user_id} 呼叫 /ask")
+
+    ###############################################
 
     data = request.json
     user_name = data.get("user_name", "TheMistry")
@@ -237,6 +240,7 @@ def ask():
 
 
     def generate():
+        fulltext = ""
         stream = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -250,7 +254,10 @@ def ask():
             if len(chunk.choices) > 0:
                 delta = chunk.choices[0].delta.content or ""
                 if delta:
+                    fulltext += delta
                     yield delta
+        #需要將fulltext等資料寫入DB
+        #save_to_db(user_id, question, full_text)
 
     return Response(generate(), mimetype="text/plain")
 
