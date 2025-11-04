@@ -6,27 +6,30 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from dotenv import load_dotenv
 
-from db import SessionLocal, create_or_get_user, store_jwt
+from users_repo import (
+    init_users_schema,
+    upsert_user_basic,
+    get_user_by_id,
+)
+from billing_repo import DAILY_AD_LIMIT
 
 # 讀取環境變數
 load_dotenv()
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-JWT_SECRET = os.getenv("JWT_SECRET")  # 建議在 .env 中設置安全隨機值
+JWT_SECRET = os.getenv("JWT_SECRET")  # 記得在 .env 設一個安全隨機值
 JWT_ALGORITHM = "HS256"
 
 # Flask Blueprint
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-
 # =====================
 # Google 驗證
 # =====================
 def verify_google_token(id_token_str):
+    """驗證 Google 登入用戶端 token"""
     try:
         info = id_token.verify_oauth2_token(
-            id_token_str,
-            google_requests.Request(),
-            GOOGLE_CLIENT_ID
+            id_token_str, google_requests.Request(), GOOGLE_CLIENT_ID
         )
         return info
     except Exception as e:
@@ -42,7 +45,7 @@ def create_session_token(user_id):
     payload = {
         "sub": user_id,
         "iat": datetime.datetime.utcnow(),
-        "exp": exp
+        "exp": exp,
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return token, exp
@@ -65,6 +68,7 @@ def decode_session_token(token):
 # =====================
 @auth_bp.route("/login", methods=["POST"])
 def auth_login():
+    """Google 登入並建立或更新使用者紀錄"""
     data = request.json or {}
     provider = data.get("provider")
     id_token_str = data.get("id_token")
@@ -86,27 +90,35 @@ def auth_login():
     email = user_info.get("email", "")
 
     try:
-        # 建立或取得使用者
-        with SessionLocal() as db:
-            user = create_or_get_user(db, google_id, email, name)
+        # 1️⃣ 建立或更新使用者資料
+        user_id = f"google:{google_id}"
+        upsert_user_basic(user_id, provider, email, name)
 
-            # 建立 JWT
-            session_token, exp = create_session_token(f"google:{google_id}")
-            store_jwt(db, user.id, session_token, exp)
+        # 2️⃣ 讀取最新使用者資料
+        user = get_user_by_id(user_id)
+
+        # 3️⃣ 產生 JWT
+        session_token, exp = create_session_token(user_id)
 
         print(f"✅ Login success: {email} ({google_id})")
 
-        return jsonify({
-            "status": "ok",
-            "user": {
-                "id": user.id,
-                "display_name": user.name,
-                "email": user.email,
-                "coins": user.coins
-            },
-            "session_token": session_token,
-            "expires_at": exp.isoformat() + "Z"
-        })
+        # 4️⃣ 回傳使用者完整狀態
+        return jsonify(
+            {
+                "status": "ok",
+                "user": {
+                    "id": user["id"],
+                    "display_name": user["display_name"],
+                    "email": user["email"],
+                    "plan": user.get("plan", "free"),
+                    "coins": user.get("coins", 0),
+                    "subscribed_until": user.get("subscribed_until"),
+                    "daily_ad_limit": DAILY_AD_LIMIT,
+                },
+                "session_token": session_token,
+                "expires_at": exp.isoformat() + "Z",
+            }
+        )
 
     except Exception as e:
         print(f"❌ Login error: {e}")
@@ -130,3 +142,35 @@ def verify_token():
         return jsonify({"valid": False, "reason": "invalid_or_expired"}), 401
 
     return jsonify({"valid": True, "user_id": payload["sub"]})
+
+
+# =====================
+# (可選) /me 端點 - 前端可直接查詢使用者最新狀態
+# =====================
+@auth_bp.route("/me", methods=["GET"])
+def get_me():
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return jsonify({"error": "missing_token"}), 401
+
+    token = auth_header.split(" ")[1]
+    payload = decode_session_token(token)
+    if not payload:
+        return jsonify({"error": "invalid_or_expired"}), 401
+
+    user_id = payload["sub"]
+    user = get_user_by_id(user_id)
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+
+    return jsonify(
+        {
+            "id": user["id"],
+            "display_name": user["display_name"],
+            "email": user["email"],
+            "plan": user.get("plan", "free"),
+            "coins": user.get("coins", 0),
+            "subscribed_until": user.get("subscribed_until"),
+        }
+    )
+

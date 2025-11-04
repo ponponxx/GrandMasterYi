@@ -1,11 +1,9 @@
-# history_repo.py
 import os
 import psycopg2
 import psycopg2.extras
 from datetime import datetime, timedelta, timezone
 import json
 import zlib
-
 from users_repo import get_user_by_id, is_subscriber
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -15,14 +13,17 @@ def get_pg():
 
 # ---- 壓縮 / 解壓 ----
 def _compress(s: str) -> bytes:
-    if s is None:
+    if not s:
         return None
     return zlib.compress(s.encode("utf-8"))
 
 def _decompress(b: bytes) -> str:
-    if b is None:
+    if not b:
         return ""
-    return zlib.decompress(b).decode("utf-8")
+    try:
+        return zlib.decompress(b).decode("utf-8")
+    except Exception:
+        return ""
 
 def _make_summary(text: str, max_len: int = 220) -> str:
     if not text:
@@ -31,25 +32,24 @@ def _make_summary(text: str, max_len: int = 220) -> str:
     return t if len(t) <= max_len else t[:max_len] + "…"
 
 # =====================
-# 初始化：建表（全文壓縮存於 BYTEA）
+# 初始化建表
 # =====================
 def init_history_schema():
     ddl = """
     CREATE TABLE IF NOT EXISTS readings (
       id SERIAL PRIMARY KEY,
-      user_id TEXT,                                -- 可為 NULL（guest）
+      user_id TEXT,
       question TEXT NOT NULL,
       hexagram_code TEXT NOT NULL,
-      changing_lines JSONB,                        -- 例如 [1,4,6]
-      result_summary TEXT,                         -- 列表用摘要
-      result_full BYTEA,                           -- 壓縮全文
-      derived_from INTEGER,                        -- 延伸占卜父ID
+      changing_lines JSONB,
+      result_summary TEXT,
+      result_full BYTEA,
+      derived_from INTEGER,
       is_pinned BOOLEAN NOT NULL DEFAULT FALSE,
       expires_at TIMESTAMP NULL,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
 
-    -- 查列表常用索引
     CREATE INDEX IF NOT EXISTS idx_readings_user_created
       ON readings (user_id, created_at DESC);
 
@@ -58,68 +58,43 @@ def init_history_schema():
     """
     with get_pg() as conn, conn.cursor() as cur:
         cur.execute(ddl)
+        conn.commit()
     print("✅ readings table ready.")
 
 # =====================
 # 寫入占卜紀錄
 # =====================
-def record_reading(
-    user_id: str | None,
-    question: str,
-    hex_code: str,
-    changing_lines_list: list[int] | None,
-    full_text: str,
-    derived_from: int | None = None,
-    is_pinned: bool = False
-) -> int:
-    """
-    - 訂閱者：未 pinned -> 預設 30 天後過期（expires_at）
-    - 非訂閱者或 guest：不設 expires_at（可由上層策略決定是否不落盤）
-    """
+def record_reading(user_id, question, hex_code, changing_lines_list,
+                   full_text, derived_from=None, is_pinned=False):
     now = datetime.now(timezone.utc)
     user = get_user_by_id(user_id) if user_id else None
     subscriber = is_subscriber(user) if user else False
-
-    expires_at = None
-    if user and subscriber and not is_pinned:
-        expires_at = now + timedelta(days=30)
+    expires_at = now + timedelta(days=30) if subscriber and not is_pinned else None
 
     summary = _make_summary(full_text)
     compressed = _compress(full_text)
-    lines_json = json.dumps(changing_lines_list or [])
 
     sql = """
-    INSERT INTO readings (
-      user_id, question, hexagram_code, changing_lines,
-      result_summary, result_full, derived_from,
-      is_pinned, expires_at
-    )
+    INSERT INTO readings (user_id, question, hexagram_code, changing_lines,
+                          result_summary, result_full, derived_from,
+                          is_pinned, expires_at)
     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
     RETURNING id;
     """
     with get_pg() as conn, conn.cursor() as cur:
         cur.execute(sql, (
-            user_id, question, hex_code, lines_json,
+            user_id, question, hex_code, changing_lines_list,
             summary, psycopg2.Binary(compressed), derived_from,
             is_pinned, expires_at
         ))
-        rid = cur.fetchone()["id"]
+        row = cur.fetchone()
         conn.commit()
-        return rid
+        return row["id"] if row else None
 
 # =====================
 # 列出歷史（摘要列表）
 # =====================
-def list_history(
-    user_id: str,
-    limit: int = 100,
-    offset: int = 0,
-    include_expired: bool = False
-) -> list[dict]:
-    """
-    - 預設不含過期（未 pinned 且 expires_at < now）
-    - 僅回摘要（result_summary）；全文另用 get_history_detail
-    """
+def list_history(user_id, limit=100, offset=0, include_expired=False):
     now = datetime.now(timezone.utc)
     with get_pg() as conn, conn.cursor() as cur:
         if include_expired:
@@ -129,7 +104,7 @@ def list_history(
                        expires_at, created_at
                 FROM readings
                 WHERE user_id=%s
-                ORDER BY created_at DESC
+                ORDER BY is_pinned DESC, created_at DESC
                 LIMIT %s OFFSET %s
             """, (user_id, limit, offset))
         else:
@@ -140,17 +115,16 @@ def list_history(
                 FROM readings
                 WHERE user_id=%s
                   AND (is_pinned = TRUE OR expires_at IS NULL OR expires_at >= %s)
-                ORDER BY created_at DESC
+                ORDER BY is_pinned DESC, created_at DESC
                 LIMIT %s OFFSET %s
             """, (user_id, now, limit, offset))
         rows = cur.fetchall()
 
-    # 轉換 changing_lines JSONB -> Python list
     out = []
     for r in rows:
         item = dict(r)
         try:
-            item["changing_lines"] = json.loads(item["changing_lines"]) if item.get("changing_lines") else []
+            item["changing_lines"] = json.loads(item["changing_lines"]) if isinstance(item["changing_lines"], str) else item["changing_lines"] or []
         except Exception:
             item["changing_lines"] = []
         out.append(item)
@@ -159,13 +133,9 @@ def list_history(
 # =====================
 # 讀取單筆全文
 # =====================
-def get_history_detail(user_id: str, reading_id: int) -> dict | None:
+def get_history_detail(user_id, reading_id):
     sql = """
-    SELECT id, user_id, question, hexagram_code, changing_lines,
-           result_summary, result_full, derived_from, is_pinned,
-           expires_at, created_at
-    FROM readings
-    WHERE id=%s AND user_id=%s
+    SELECT * FROM readings WHERE id=%s AND user_id=%s
     """
     with get_pg() as conn, conn.cursor() as cur:
         cur.execute(sql, (reading_id, user_id))
@@ -174,25 +144,23 @@ def get_history_detail(user_id: str, reading_id: int) -> dict | None:
             return None
         d = dict(row)
         try:
-            d["changing_lines"] = json.loads(d["changing_lines"]) if d.get("changing_lines") else []
+            d["changing_lines"] = json.loads(d["changing_lines"]) if isinstance(d["changing_lines"], str) else d["changing_lines"] or []
         except Exception:
             d["changing_lines"] = []
-        d["result_full_text"] = _decompress(d["result_full"]) if d.get("result_full") else ""
-        # 不把 bytea 原文丟給前端
-        del d["result_full"]
+        d["result_full_text"] = _decompress(d.get("result_full"))
+        d.pop("result_full", None)
         return d
 
 # =====================
 # Pin / Unpin
 # =====================
-def set_pin(user_id: str, reading_id: int, pin: bool) -> bool:
+def set_pin(user_id, reading_id, pin):
     now = datetime.now(timezone.utc)
     user = get_user_by_id(user_id)
     subscriber = is_subscriber(user) if user else False
 
     with get_pg() as conn, conn.cursor() as cur:
         if pin:
-            # 釘選 → 永久（清除過期時間）
             cur.execute("""
                 UPDATE readings
                 SET is_pinned=TRUE, expires_at=NULL
@@ -200,7 +168,6 @@ def set_pin(user_id: str, reading_id: int, pin: bool) -> bool:
                 RETURNING id
             """, (reading_id, user_id))
         else:
-            # 取消釘選 → 訂閱者恢復 30 天期限；非訂閱者不設期限（由策略決定）
             new_exp = (now + timedelta(days=30)) if subscriber else None
             cur.execute("""
                 UPDATE readings
@@ -208,15 +175,14 @@ def set_pin(user_id: str, reading_id: int, pin: bool) -> bool:
                 WHERE id=%s AND user_id=%s
                 RETURNING id
             """, (new_exp, reading_id, user_id))
-        ok = cur.fetchone() is not None
+        row = cur.fetchone()
         conn.commit()
-        return ok
+        return bool(row)
 
 # =====================
-# 可選：清理已過期
+# 清理過期紀錄
 # =====================
-def delete_expired(limit: int = 1000) -> int:
-    """批次刪除過期且未 pinned 的資料（可排程呼叫）"""
+def delete_expired(limit=1000):
     now = datetime.now(timezone.utc)
     with get_pg() as conn, conn.cursor() as cur:
         cur.execute("""
@@ -226,6 +192,7 @@ def delete_expired(limit: int = 1000) -> int:
               AND expires_at < %s
             RETURNING id
         """, (now,))
-        rows = cur.fetchall()
+        rows = cur.fetchall() or []
         conn.commit()
-        return len(rows or [])
+        return len(rows)
+
