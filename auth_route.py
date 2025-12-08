@@ -125,6 +125,35 @@ def auth_login():
         return jsonify({"error": "server_error", "details": str(e)}), 500
 
 
+
+#測試用入口
+@auth_bp.route("/fake_login", methods=["POST"])
+def fake_login():
+    user_id = "google:test_user_123"
+
+    # 1️⃣ 把測試用戶寫入 users table
+    upsert_user_basic(
+        user_id=user_id,
+        provider="google",
+        email="test@example.com",
+        display_name="TestUser"
+    )
+
+    # 2️⃣ 建立 token
+    session_token, exp = create_session_token(user_id)
+
+    # 3️⃣ 回傳 user 狀態
+    user = get_user_by_id(user_id)
+
+    return jsonify({
+        "user_id": user_id,
+        "session_token": session_token,
+        "coins": user["coins"]  # 預期為 0
+    })
+
+
+
+
 # =====================
 # JWT 驗證 API
 # =====================

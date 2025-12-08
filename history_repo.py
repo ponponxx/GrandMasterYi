@@ -5,11 +5,16 @@ from datetime import datetime, timedelta, timezone
 import json
 import zlib
 from users_repo import get_user_by_id, is_subscriber
+from dotenv import load_dotenv
+load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_pg():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    return psycopg2.connect(
+        DATABASE_URL,
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
 
 # ---- 壓縮 / 解壓 ----
 def _compress(s: str) -> bytes:
@@ -124,7 +129,15 @@ def list_history(user_id, limit=100, offset=0, include_expired=False):
     for r in rows:
         item = dict(r)
         try:
-            item["changing_lines"] = json.loads(item["changing_lines"]) if isinstance(item["changing_lines"], str) else item["changing_lines"] or []
+            val = item.get("changing_lines")
+            if isinstance(val, list):
+                item["changing_lines"] = val
+            else:
+                try:
+                    item["changing_lines"] = json.loads(val) if val else []
+                except:
+                    item["changing_lines"] = []
+
         except Exception:
             item["changing_lines"] = []
         out.append(item)
