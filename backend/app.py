@@ -1,5 +1,7 @@
 import os
 from flask import Flask, request, jsonify, Response
+from flask_cors import CORS
+
 from dotenv import load_dotenv
 import time
 import jwt
@@ -14,27 +16,40 @@ from history_repo import (
 load_dotenv()
 
 # 1️⃣ 先建立 Flask 主應用
+
 app = Flask(__name__)
+CORS(app)
 
 #拉BP
 from auth_route import auth_bp
-app.register_blueprint(auth_bp)
 from ask_route import ask_bp
-app.register_blueprint(ask_bp)
 from ads_route import ads_bp
-app.register_blueprint(ads_bp)
 from store_route import store_bp
-app.register_blueprint(store_bp)
 from history_route import history_bp
-app.register_blueprint(history_bp)
+app.register_blueprint(auth_bp, url_prefix="/api/auth")
+app.register_blueprint(ask_bp, url_prefix="/api/divination")
+app.register_blueprint(ads_bp, url_prefix="/api/ads")
+app.register_blueprint(store_bp, url_prefix="/api/store")
+app.register_blueprint(history_bp, url_prefix="/api/history")
 
 
 
 
 # 啟動時建表
-init_history_schema()
-init_billing_schema()
-init_users_schema()
+try:
+    init_history_schema()
+except Exception as e:
+    print("DB init skipped:", e)
+try:
+    init_billing_schema()
+except Exception as e:
+    print("DB init skipped:", e)
+try:
+    init_users_schema()
+except Exception as e:
+    print("DB init skipped:", e)
+
+
 
 load_dotenv()  # 自動讀取 .env
 
@@ -46,9 +61,7 @@ APP_SECRET_KEY = os.getenv("APP_SECRET_KEY", "dev-secret")  # 自己加
 '''
 user_sessions = {}
 
-@app.route("/")
-def home():
-    return app.send_static_file("index.html")
-
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)
+
+

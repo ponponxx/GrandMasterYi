@@ -1,0 +1,348 @@
+openapi: 3.0.3
+info:
+  title: MasterYi API
+  version: "2.0.0"
+
+servers:
+  - url: http://localhost:5000
+
+paths:
+
+  /api/auth/login:
+    post:
+      summary: Login via Google/Apple and get session JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthLoginRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthLoginResponse"
+        "400": { description: invalid_request }
+        "401": { description: invalid_id_token }
+        "500": { description: server_error }
+
+  /api/auth/verify:
+    post:
+      summary: Verify session JWT
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthVerifyResponse"
+        "401": { description: invalid_or_expired_token }
+
+  /api/auth/me:
+    get:
+      summary: Get current user profile with wallet & subscription
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401": { description: invalid_or_expired_token }
+
+  /api/ads/complete:
+    post:
+      summary: Complete ad watching
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdsCompleteRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdsCompleteResponse"
+        "400": { description: invalid_request }
+        "401": { description: invalid_ad_proof }
+        "500": { description: server_error }
+
+  /api/divination:
+    post:
+      summary: Perform divination (Streaming or JSON)
+      parameters:
+        - in: header
+          name: Accept
+          required: false
+          schema:
+            type: string
+            enum: ["text/plain", "application/json"]
+        - in: header
+          name: X-Ad-Session
+          required: false
+          schema:
+            type: string
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DivinationRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DivinationJsonResponse"
+        "400": { description: missing_or_invalid_fields }
+        "401": { description: invalid_or_expired_token }
+        "402": { description: insufficient_coins }
+        "429": { description: rate_limited }
+        "500": { description: server_error }
+
+  /api/history/list:
+    get:
+      summary: List history (login only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistoryListResponse"
+        "401": { description: invalid_or_expired_token }
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    # ===== AUTH =====
+
+    AuthLoginRequest:
+      type: object
+      required: [provider, id_token]
+      properties:
+        provider:
+          type: string
+          enum: [google, apple]
+        id_token:
+          type: string
+
+    AuthLoginResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserProfile"
+
+    AuthVerifyResponse:
+      type: object
+      required: [valid]
+      properties:
+        valid:
+          type: boolean
+
+    # ===== USER / WALLET =====
+
+    SubscriptionInfo:
+      type: object
+      required: [plan, quota]
+      properties:
+        plan:
+          type: string
+          enum: [free, pro]
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        quota:
+          type: integer
+          minimum: 0
+        next_refill_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    WalletInfo:
+      type: object
+      required: [gold, silver]
+      properties:
+        gold:
+          type: integer
+          minimum: 0
+        silver:
+          type: integer
+          minimum: 0
+
+    UserProfile:
+      type: object
+      required: [id, history_limit, subscription, wallet]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          nullable: true
+        display_name:
+          type: string
+          nullable: true
+        subscription:
+          $ref: "#/components/schemas/SubscriptionInfo"
+        wallet:
+          $ref: "#/components/schemas/WalletInfo"
+        history_limit:
+          type: integer
+          minimum: 0
+
+    # ===== ADS =====
+
+    AdsCompleteRequest:
+      type: object
+      required: [provider, ad_proof]
+      properties:
+        provider:
+          type: string
+          enum: [admob, unknown]
+        ad_proof:
+          type: string
+
+    AdsCompleteResponse:
+      oneOf:
+        - type: object
+          required: [reward_type, silver_granted, new_silver_balance]
+          properties:
+            reward_type:
+              type: string
+              enum: [silver]
+            silver_granted:
+              type: integer
+            new_silver_balance:
+              type: integer
+        - type: object
+          required: [reward_type, ad_session_token, expires_in]
+          properties:
+            reward_type:
+              type: string
+              enum: [unlock]
+            ad_session_token:
+              type: string
+            expires_in:
+              type: integer
+              minimum: 1
+
+    # ===== DIVINATION =====
+
+    DivinationRequest:
+      type: object
+      required: [question, throws]
+      properties:
+        question:
+          type: string
+          minLength: 1
+          maxLength: 500
+        throws:
+          type: array
+          minItems: 6
+          maxItems: 6
+          items:
+            type: integer
+            enum: [6,7,8,9]
+        user_name:
+          type: string
+          nullable: true
+          maxLength: 50
+        client_context:
+          type: object
+          nullable: true
+          properties:
+            app:
+              type: string
+              enum: [web, ios, android]
+            version:
+              type: string
+              nullable: true
+
+    DivinationJsonResponse:
+      type: object
+      required: [hexagram_code, changing_lines, content, saved_to_history]
+      properties:
+        reading_id:
+          type: integer
+          nullable: true
+        hexagram_code:
+          type: string
+        changing_lines:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 6
+        content:
+          type: string
+        saved_to_history:
+          type: boolean
+
+    # ===== HISTORY =====
+
+    HistoryListItem:
+      type: object
+      required: [reading_id, question, created_at, is_pinned]
+      properties:
+        reading_id:
+          type: integer
+        question:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        is_pinned:
+          type: boolean
+
+    HistoryListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistoryListItem"
+        total:
+          type: integer
+          minimum: 0

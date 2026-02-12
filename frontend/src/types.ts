@@ -1,0 +1,61 @@
+
+export interface AuthLoginRequest {
+  provider: "google" | "apple";
+  id_token: string;
+}
+
+export interface SubscriptionInfo {
+  plan: "free" | "pro";
+  expires_at?: string | null;
+  quota: number;
+  next_refill_at?: string | null;
+}
+
+export interface WalletInfo {
+  gold: number;
+  silver: number;
+}
+
+export interface UserProfile {
+  id: string;
+  email?: string | null;
+  display_name?: string | null;
+  subscription: SubscriptionInfo;
+  wallet: WalletInfo;
+  history_limit: number;
+}
+
+export interface AuthLoginResponse {
+  token: string;
+  user: UserProfile;
+}
+
+export interface DivinationRequest {
+  question: string;
+  throws: (6 | 7 | 8 | 9)[];
+  user_name?: string | null;
+  client_context?: {
+    app?: "web" | "ios" | "android";
+    version?: string | null;
+  } | null;
+}
+
+export interface DivinationJsonResponse {
+  reading_id?: number | null;
+  hexagram_code: string;
+  changing_lines: number[];
+  content: string;
+  saved_to_history: boolean;
+}
+
+export interface HistoryListItem {
+  reading_id: number;
+  question: string;
+  created_at: string;
+  is_pinned: boolean;
+}
+
+export interface HistoryListResponse {
+  items: HistoryListItem[];
+  total: number;
+}
