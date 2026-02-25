@@ -1,0 +1,131 @@
+{
+  "app": {
+    "brandIcon": "YI",
+    "brandTitle": "MasterYi Oracle",
+    "wallet": {
+      "gold": "Gold",
+      "silver": "Silver"
+    },
+    "logoutTitle": "Logout",
+    "tabs": {
+      "main": {
+        "label": "Cast",
+        "icon": "M"
+      },
+      "shop": {
+        "label": "Shop",
+        "icon": "S"
+      },
+      "history": {
+        "label": "History",
+        "icon": "H"
+      },
+      "achievements": {
+        "label": "Progress",
+        "icon": "A"
+      }
+    }
+  },
+  "login": {
+    "errors": {
+      "missingIdToken": "Google login failed: missing id_token.",
+      "googleFailedDefault": "Google login failed.",
+      "guestFailedDefault": "Guest login failed."
+    },
+    "googleButtonError": "Google login popup failed.",
+    "brandSeal": "MasterYi Oracle",
+    "title": "Welcome",
+    "subtitle": "Seek the balance of Yin and Yang",
+    "appleLoginTitle": "Apple login is coming soon.",
+    "appleLoginLabel": "Apple login (coming soon)",
+    "orLabel": "OR",
+    "guestLoginLabel": "Continue as Guest",
+    "yinYangAlt": "Yin Yang",
+    "language": {
+      "label": "Language",
+      "options": {
+        "en": "English",
+        "zhtw": "Traditional Chinese"
+      }
+    }
+  },
+  "history": {
+    "title": "History",
+    "subtitle": "Chronicles of your destiny",
+    "tabs": {
+      "offline": "Local Records",
+      "cloud": "Cloud Records"
+    }
+  },
+  "historyCloud": {
+    "alerts": {
+      "pinFailed": "Failed to update pin status.",
+      "loadDetailFailed": "Failed to load cloud history detail."
+    },
+    "emptyMessage": "No cloud records yet.",
+    "questionPrefix": "\"",
+    "questionSuffix": "\"",
+    "metaSeparator": "|",
+    "detailButtonShow": "Detail",
+    "detailButtonHide": "Hide",
+    "pinIconOn": "P",
+    "pinIconOff": "o",
+    "hexagramTitleTemplate": "Hexagram {id}: {name}",
+    "summaryJoiner": ", ",
+    "sectionHexagramContext": "Hexagram Context",
+    "sectionInterpretation": "AI Interpretation",
+    "fallbackHexagramTemplate": "Hexagram {code}"
+  },
+  "historyOffline": {
+    "emptyMessage": "No local records yet.",
+    "titleTemplate": "Hexagram {id}: {name}",
+    "questionPrefix": "\"",
+    "questionSuffix": "\"",
+    "summaryJoiner": ", ",
+    "changingLinesTitle": "Changing Lines"
+  },
+  "shop": {
+    "title": "Shop",
+    "subtitle": "Support the sanctuary of wisdom",
+    "cards": {
+      "subscription": {
+        "title": "Pro Plan",
+        "descriptionLines": [
+          "Unlimited casts and full interpretation.",
+          "Priority model access and richer guidance."
+        ],
+        "price": "NT$ 290",
+        "unit": "/ month",
+        "button": "Subscribe"
+      },
+      "goldPack": {
+        "icon": "G",
+        "title": "Gold Pack",
+        "descriptionLines": [
+          "One-time purchase for interpretation coins.",
+          "Good for occasional deep readings."
+        ],
+        "price": "NT$ 150",
+        "button": "Buy Gold"
+      }
+    },
+    "balance": {
+      "title": "Current Balance",
+      "goldLabel": "Gold",
+      "silverLabel": "Silver"
+    }
+  },
+  "achievements": {
+    "title": "Progress",
+    "subtitle": "The path of sixty-four changes",
+    "seal": "Personal Realm",
+    "centerMark": "YI",
+    "hexagramTitleTemplate": "Hexagram {id}",
+    "stats": {
+      "discoveredLabel": "Hexagrams Found",
+      "readingsLabel": "Total Readings",
+      "stageLabel": "Current Stage"
+    },
+    "footer": "Observe change, and return to clarity."
+  }
+}

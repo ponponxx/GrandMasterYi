@@ -69,6 +69,28 @@ def init_history_schema():
 # =====================
 # 寫入占卜紀錄
 # =====================
+def _normalize_changing_lines(value):
+    if isinstance(value, list):
+        out = []
+        for item in value:
+            if isinstance(item, bool):
+                continue
+            try:
+                out.append(int(item))
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except Exception:
+            return []
+        return _normalize_changing_lines(parsed)
+
+    return []
+
+
 def record_reading(user_id, question, hex_code, changing_lines_list,
                    full_text, derived_from=None, is_pinned=False):
     now = datetime.now(timezone.utc)
@@ -78,6 +100,7 @@ def record_reading(user_id, question, hex_code, changing_lines_list,
 
     summary = _make_summary(full_text)
     compressed = _compress(full_text)
+    changing_lines_json = psycopg2.extras.Json(_normalize_changing_lines(changing_lines_list))
 
     sql = """
     INSERT INTO readings (user_id, question, hexagram_code, changing_lines,
@@ -87,11 +110,20 @@ def record_reading(user_id, question, hex_code, changing_lines_list,
     RETURNING id;
     """
     with get_pg() as conn, conn.cursor() as cur:
-        cur.execute(sql, (
-            user_id, question, hex_code, changing_lines_list,
-            summary, psycopg2.Binary(compressed), derived_from,
-            is_pinned, expires_at
-        ))
+        cur.execute(
+            sql,
+            (
+                user_id,
+                question,
+                hex_code,
+                changing_lines_json,
+                summary,
+                psycopg2.Binary(compressed) if compressed is not None else None,
+                derived_from,
+                is_pinned,
+                expires_at,
+            ),
+        )
         row = cur.fetchone()
         conn.commit()
         return row["id"] if row else None
@@ -129,15 +161,7 @@ def list_history(user_id, limit=100, offset=0, include_expired=False):
     for r in rows:
         item = dict(r)
         try:
-            val = item.get("changing_lines")
-            if isinstance(val, list):
-                item["changing_lines"] = val
-            else:
-                try:
-                    item["changing_lines"] = json.loads(val) if val else []
-                except:
-                    item["changing_lines"] = []
-
+            item["changing_lines"] = _normalize_changing_lines(item.get("changing_lines"))
         except Exception:
             item["changing_lines"] = []
         out.append(item)
@@ -157,7 +181,7 @@ def get_history_detail(user_id, reading_id):
             return None
         d = dict(row)
         try:
-            d["changing_lines"] = json.loads(d["changing_lines"]) if isinstance(d["changing_lines"], str) else d["changing_lines"] or []
+            d["changing_lines"] = _normalize_changing_lines(d.get("changing_lines"))
         except Exception:
             d["changing_lines"] = []
         d["result_full_text"] = _decompress(d.get("result_full"))

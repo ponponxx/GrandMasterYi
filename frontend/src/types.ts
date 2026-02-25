@@ -40,12 +40,19 @@ export interface DivinationRequest {
   } | null;
 }
 
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+
 export interface DivinationJsonResponse {
   reading_id?: number | null;
   hexagram_code: string;
   changing_lines: number[];
   content: string;
   saved_to_history: boolean;
+  token_usage?: TokenUsage | null;
 }
 
 export interface HistoryListItem {
@@ -58,4 +65,14 @@ export interface HistoryListItem {
 export interface HistoryListResponse {
   items: HistoryListItem[];
   total: number;
+}
+
+export interface HistoryDetailResponse {
+  reading_id: number;
+  question: string;
+  hexagram_code: string;
+  changing_lines: number[];
+  content: string;
+  created_at: string;
+  is_pinned: boolean;
 }

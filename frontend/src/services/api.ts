@@ -5,7 +5,9 @@ import {
   UserProfile, 
   DivinationRequest, 
   DivinationJsonResponse,
-  HistoryListResponse
+  HistoryListResponse,
+  HistoryDetailResponse,
+  TokenUsage
 } from '../types';
 
 const BASE_URL = '/api';
@@ -24,6 +26,18 @@ export type AdsCompleteResponse = {
   ad_session_token: string;
   expires_in: number;
 };
+
+interface FakeLoginResponse {
+  token: string;
+}
+
+interface PinHistoryResponse {
+  ok: boolean;
+}
+
+export interface DivinationStreamResult {
+  tokenUsage: TokenUsage | null;
+}
 
 class ApiService {
   private token: string | null = localStorage.getItem('auth_token');
@@ -72,8 +86,17 @@ class ApiService {
     return this.request<UserProfile>('/auth/me');
   }
 
+  async fakeLogin(userId = `guest_${Math.random().toString(36).slice(2, 10)}`): Promise<UserProfile> {
+    const res = await this.request<FakeLoginResponse>('/auth/fake_login', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId }),
+    });
+    this.setToken(res.token);
+    return this.getMe();
+  }
+
   async performDivination(data: DivinationRequest, adSessionToken?: string): Promise<DivinationJsonResponse> {
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { Accept: 'application/json' };
     if (adSessionToken) {
       headers['X-Ad-Session'] = adSessionToken;
     }
@@ -82,6 +105,117 @@ class ApiService {
       body: JSON.stringify(data),
       headers
     });
+  }
+
+  async performDivinationStream(
+    data: DivinationRequest,
+    onChunk: (chunk: string) => void,
+    adSessionToken?: string
+  ): Promise<DivinationStreamResult> {
+    const tokenUsageMarker = '[[[TOKEN_USAGE]]]';
+    const headers = new Headers({
+      'Accept': 'text/plain',
+      'Content-Type': 'application/json',
+    });
+
+    if (this.token) {
+      headers.set('Authorization', `Bearer ${this.token}`);
+    }
+    if (adSessionToken) {
+      headers.set('X-Ad-Session', adSessionToken);
+    }
+
+    const response = await fetch(`${BASE_URL}/divination`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      if (response.status === 402) {
+        throw new Error('INSUFFICIENT_FUNDS');
+      }
+      throw new Error(error || response.statusText);
+    }
+
+    if (!response.body) {
+      return { tokenUsage: null };
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let streamBuffer = '';
+    let usageBuffer = '';
+    let readingUsagePayload = false;
+
+    const processIncoming = (incoming: string) => {
+      if (!incoming) {
+        return;
+      }
+
+      if (readingUsagePayload) {
+        usageBuffer += incoming;
+        return;
+      }
+
+      streamBuffer += incoming;
+      const markerIndex = streamBuffer.indexOf(tokenUsageMarker);
+      if (markerIndex >= 0) {
+        let readable = streamBuffer.slice(0, markerIndex);
+        if (readable.endsWith('\n')) {
+          readable = readable.slice(0, -1);
+        }
+        if (readable) {
+          onChunk(readable);
+        }
+        usageBuffer += streamBuffer.slice(markerIndex + tokenUsageMarker.length);
+        streamBuffer = '';
+        readingUsagePayload = true;
+        return;
+      }
+
+      const tailReserve = tokenUsageMarker.length - 1;
+      if (streamBuffer.length > tailReserve) {
+        const emitLength = streamBuffer.length - tailReserve;
+        onChunk(streamBuffer.slice(0, emitLength));
+        streamBuffer = streamBuffer.slice(emitLength);
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      const chunk = decoder.decode(value, { stream: true });
+      processIncoming(chunk);
+    }
+
+    processIncoming(decoder.decode());
+
+    if (!readingUsagePayload && streamBuffer) {
+      onChunk(streamBuffer);
+    }
+
+    let tokenUsage: TokenUsage | null = null;
+    if (readingUsagePayload) {
+      const payloadRaw = usageBuffer.trim();
+      if (payloadRaw) {
+        try {
+          const parsed = JSON.parse(payloadRaw);
+          tokenUsage = {
+            input_tokens: Number(parsed?.input_tokens ?? 0),
+            output_tokens: Number(parsed?.output_tokens ?? 0),
+            total_tokens: Number(parsed?.total_tokens ?? 0),
+          };
+        } catch {
+          tokenUsage = null;
+        }
+      }
+    }
+
+    return { tokenUsage };
   }
 
   async completeAd(data: AdsCompleteRequest): Promise<AdsCompleteResponse> {
@@ -94,6 +228,20 @@ class ApiService {
   async getHistory(limit = 20, offset = 0): Promise<HistoryListResponse> {
     const params = new URLSearchParams({ limit: limit.toString(), offset: offset.toString() });
     return this.request<HistoryListResponse>(`/history/list?${params.toString()}`);
+  }
+
+  async getHistoryDetail(readingId: number): Promise<HistoryDetailResponse> {
+    return this.request<HistoryDetailResponse>(`/history/detail/${readingId}`);
+  }
+
+  async pinHistory(readingId: number, isPinned: boolean): Promise<PinHistoryResponse> {
+    return this.request<PinHistoryResponse>('/history/pin', {
+      method: 'POST',
+      body: JSON.stringify({
+        reading_id: readingId,
+        is_pinned: isPinned,
+      }),
+    });
   }
 }
 

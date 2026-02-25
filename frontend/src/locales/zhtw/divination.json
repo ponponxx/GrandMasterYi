@@ -1,0 +1,49 @@
+{
+  "alerts": {
+    "lookupFailedPrefix": "讀取卦象資料失敗：",
+    "unknownError": "未知錯誤",
+    "missingQuestion": "請先輸入想詢問的問題，再進行解卦。",
+    "interpretationFailedPrefix": "解卦失敗：",
+    "adFailed": "廣告獎勵領取失敗。"
+  },
+  "adDialog": {
+    "title": "靈幣不足",
+    "description": "目前可用靈幣不足，觀看一次獎勵廣告可解鎖本次解卦，或稍後再試。",
+    "watchButton": "觀看廣告",
+    "cancelButton": "取消"
+  },
+  "header": {
+    "title": "起卦占問",
+    "questionPlaceholder": "請輸入你的問題..."
+  },
+  "status": {
+    "castingLine": "正在擲第 {line} 爻",
+    "castingDone": "起卦完成",
+    "idleHint": "按下「開始起卦」以啟動占卜。",
+    "loading": "正在解卦..."
+  },
+  "buttons": {
+    "startCasting": "開始起卦",
+    "askAi": "請 AI 解卦",
+    "reset": "重置",
+    "newReading": "重新占問"
+  },
+  "localResult": {
+    "seal": "本卦結果",
+    "titleTemplate": "第 {id} 卦：{name}",
+    "summaryJoiner": "，",
+    "throwsLabel": "六爻（由初至上）：",
+    "changingLinesTitle": "變爻"
+  },
+  "aiResult": {
+    "title": "AI 解卦",
+    "cornerMark": "易",
+    "costHint": "（消耗 1 點）"
+  },
+  "tokenUsage": {
+    "title": "Token 用量",
+    "inputLabel": "輸入",
+    "outputLabel": "輸出",
+    "totalLabel": "總計"
+  }
+}

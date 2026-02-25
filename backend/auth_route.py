@@ -12,7 +12,11 @@ from users_repo import get_user_by_id, upsert_user_basic
 load_dotenv()
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")
+JWT_SECRET = (os.getenv("JWT_SECRET") or "").strip()
+if not JWT_SECRET:
+    raise RuntimeError("Missing JWT_SECRET in environment. Set a value with at least 32 bytes.")
+if len(JWT_SECRET.encode("utf-8")) < 32:
+    raise RuntimeError("JWT_SECRET must be at least 32 bytes for HS256.")
 JWT_ALGORITHM = "HS256"
 
 PRO_PLAN_VALUES = {"pro", "pro_monthly", "pro_yearly", "subscriber"}
@@ -61,7 +65,10 @@ def _iso_or_none(dt_value):
 def _to_user_profile(user: dict) -> dict:
     raw_plan = str(user.get("plan") or "free").lower()
     plan = "pro" if raw_plan in PRO_PLAN_VALUES else "free"
+    gold = int(user.get("gold") or 0)
     coins = int(user.get("coins") or 0)
+    if gold < 0:
+        gold = 0
     if coins < 0:
         coins = 0
 
@@ -76,7 +83,7 @@ def _to_user_profile(user: dict) -> dict:
             "next_refill_at": None,
         },
         "wallet": {
-            "gold": 0,
+            "gold": gold,
             "silver": coins,
         },
         "history_limit": DEFAULT_HISTORY_LIMIT,
@@ -121,7 +128,12 @@ def auth_login():
 
 @auth_bp.route("/fake_login", methods=["POST"])
 def fake_login():
-    user_id = "google:test_user_123"
+    data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
+    if not isinstance(user_id, str) or not user_id.strip():
+        user_id = "google:test_user_123"
+    user_id = user_id.strip()
+
     upsert_user_basic(
         user_id=user_id,
         provider="google",
@@ -129,7 +141,7 @@ def fake_login():
         display_name="TestUser",
     )
     session_token, _ = create_session_token(user_id)
-    return jsonify({"user_id": user_id, "session_token": session_token})
+    return jsonify({"token": session_token})
 
 
 @auth_bp.route("/verify", methods=["POST"])

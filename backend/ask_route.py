@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 import traceback
@@ -7,18 +8,19 @@ from flask import Blueprint, Response, jsonify, request
 from auth_route import decode_session_token
 from billing_repo import can_consume_ask
 from history_repo import record_reading
-from services.llm_service import generate_divination
+from services.llm_service import LLMServiceError, generate_divination
 from users_repo import get_user_by_id
 
 ask_bp = Blueprint("ask", __name__)
 
 SYSTEM_PROMPT = (
-    "You are an I Ching divination assistant. "
+    "You are an I Ching divination Master. "
     "Use only the provided hexagram/judgment/line-text context from database as primary evidence. "
     "Write in Traditional Chinese, practical and specific, and avoid inventing missing classics text."
 )
 
 ICHING_DB_PATH = os.path.join(os.path.dirname(__file__), "iching.db")
+TOKEN_USAGE_MARKER = "\n[[[TOKEN_USAGE]]]"
 TRIGRAM_MAP_TOP_DOWN = {
     "111": ("乾", "天"),
     "110": ("巽", "風"),
@@ -92,6 +94,23 @@ def _parse_request_payload(data):
         "user_name": user_name,
         "client_context": client_context,
     }
+
+
+def _parse_throws_payload(data):
+    if not isinstance(data, dict):
+        return None
+
+    throws = data.get("throws")
+    if not isinstance(throws, list) or len(throws) != 6:
+        return None
+
+    normalized_throws = []
+    for value in throws:
+        if isinstance(value, bool) or not isinstance(value, int) or value not in {6, 7, 8, 9}:
+            return None
+        normalized_throws.append(value)
+
+    return normalized_throws
 
 
 def _line_name_from_throw(position_num, throw_value):
@@ -227,6 +246,55 @@ def _save_reading(user_id, question, hexagram_code, changing_lines, content):
         return None
 
 
+def _format_context_response(context):
+    raw_name = (context.get("hexagram_name") or "").strip()
+    name_parts = raw_name.split()
+    display_name = name_parts[0] if name_parts else raw_name
+    trigram_title = " ".join(name_parts[1:]).strip()
+
+    line_texts = []
+    for row in context.get("changing_line_rows", []):
+        position = (row.get("position") or "").strip()
+        text = (row.get("text") or "").strip()
+        if position and text:
+            line_texts.append(f"{position}，{text}")
+        elif text:
+            line_texts.append(text)
+
+    return {
+        "hexagram_id": context["hexagram_id"],
+        "hexagram_code": context["hexagram_code"],
+        "hexagram_name": raw_name,
+        "display_name": display_name,
+        "trigram_title": trigram_title,
+        "judgment": context["judgment"],
+        "changing_lines": context["changing_positions"],
+        "changing_line_texts": line_texts,
+    }
+
+
+@ask_bp.route("/context", methods=["POST"])
+def ask_context():
+    user_id = _get_user_id_from_bearer()
+    if not user_id:
+        return jsonify({"error": "invalid_or_expired_token"}), 401
+
+    user = get_user_by_id(user_id)
+    if not user:
+        return jsonify({"error": "invalid_or_expired_token"}), 401
+
+    throws = _parse_throws_payload(request.get_json(silent=True) or {})
+    if not throws:
+        return jsonify({"error": "missing_or_invalid_fields"}), 400
+
+    try:
+        context = _load_iching_context(throws)
+        return jsonify(_format_context_response(context))
+    except Exception as exc:
+        traceback.print_exc()
+        return jsonify({"error": "server_error", "details": f"iching_lookup_failed:{exc}"}), 500
+
+
 @ask_bp.route("", methods=["POST"])
 def ask_main():
     user_id = _get_user_id_from_bearer()
@@ -276,8 +344,20 @@ def ask_main():
     wants_json = "application/json" in accept_header and "text/plain" not in accept_header
 
     if wants_json:
+        usage_info = {}
+
+        def capture_usage(usage_payload):
+            usage_info.clear()
+            usage_info.update(usage_payload or {})
+
         try:
-            content = "".join(generate_divination(SYSTEM_PROMPT, llm_user_prompt)).strip()
+            content = "".join(
+                generate_divination(SYSTEM_PROMPT, llm_user_prompt, usage_callback=capture_usage)
+            ).strip()
+        except LLMServiceError as exc:
+            traceback.print_exc()
+            status_code = exc.status_code if exc.status_code in {429, 502, 503, 504} else 503
+            return jsonify({"error": "server_error", "details": str(exc)}), status_code
         except Exception as exc:
             traceback.print_exc()
             return jsonify({"error": "server_error", "details": str(exc)}), 500
@@ -290,15 +370,27 @@ def ask_main():
                 "changing_lines": changing_lines,
                 "content": content,
                 "saved_to_history": reading_id is not None,
+                "token_usage": usage_info or None,
             }
         )
 
     def stream_response():
         chunks = []
+        usage_info = {}
+
+        def capture_usage(usage_payload):
+            usage_info.clear()
+            usage_info.update(usage_payload or {})
+
         try:
-            for chunk in generate_divination(SYSTEM_PROMPT, llm_user_prompt):
+            for chunk in generate_divination(SYSTEM_PROMPT, llm_user_prompt, usage_callback=capture_usage):
                 chunks.append(chunk)
                 yield chunk
+            if usage_info:
+                yield f"{TOKEN_USAGE_MARKER}{json.dumps(usage_info, ensure_ascii=False)}"
+        except LLMServiceError as exc:
+            traceback.print_exc()
+            yield f"\n[llm_unavailable] {exc}"
         except Exception:
             traceback.print_exc()
             yield "\n[server_error]"

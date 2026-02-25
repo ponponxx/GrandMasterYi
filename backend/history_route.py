@@ -52,6 +52,18 @@ def _count_visible_history(user_id: str) -> int:
         return int(row.get("total", 0))
 
 
+def _to_detail_response(item: dict) -> dict:
+    return {
+        "reading_id": int(item["id"]),
+        "question": item.get("question", ""),
+        "hexagram_code": item.get("hexagram_code", ""),
+        "changing_lines": item.get("changing_lines") or [],
+        "content": item.get("result_full_text", ""),
+        "created_at": _to_iso_or_now(item.get("created_at")),
+        "is_pinned": bool(item.get("is_pinned", False)),
+    }
+
+
 @history_bp.route("/list", methods=["GET"])
 def list_user_history():
     user_id, err_resp, code = _get_user_from_auth()
@@ -94,11 +106,11 @@ def history_detail(reading_id):
     try:
         item = get_history_detail(user_id, reading_id)
         if not item:
-            return jsonify({"ok": False, "error": "not_found"}), 404
-        return jsonify({"ok": True, "item": item})
+            return jsonify({"error": "not_found"}), 404
+        return jsonify(_to_detail_response(item))
     except Exception:
         traceback.print_exc()
-        return jsonify({"ok": False, "error": "server_error"}), 500
+        return jsonify({"error": "server_error"}), 500
 
 
 @history_bp.route("/pin", methods=["POST"])
@@ -109,19 +121,28 @@ def history_pin():
 
     data = request.get_json(silent=True) or {}
     reading_id = data.get("reading_id")
-    pin = data.get("pin", True)
-
-    if not reading_id:
-        return jsonify({"error": "missing_reading_id"}), 400
+    pin_raw = data.get("is_pinned", data.get("pin", True))
 
     try:
-        ok = set_pin(user_id, reading_id, bool(pin))
+        reading_id = int(reading_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "missing_or_invalid_fields"}), 400
+
+    if isinstance(pin_raw, bool):
+        pin = pin_raw
+    elif isinstance(pin_raw, int) and pin_raw in {0, 1}:
+        pin = bool(pin_raw)
+    else:
+        return jsonify({"error": "missing_or_invalid_fields"}), 400
+
+    try:
+        ok = set_pin(user_id, reading_id, pin)
         if not ok:
-            return jsonify({"ok": False, "error": "not_found_or_no_permission"}), 404
-        return jsonify({"ok": True, "pinned": pin})
+            return jsonify({"error": "not_found_or_no_permission"}), 404
+        return jsonify({"ok": True})
     except Exception:
         traceback.print_exc()
-        return jsonify({"ok": False, "error": "server_error"}), 500
+        return jsonify({"error": "server_error"}), 500
 
 
 @history_bp.route("/sync", methods=["POST"])

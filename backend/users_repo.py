@@ -1,21 +1,20 @@
-import os
+﻿import os
+from datetime import datetime, timezone
+
 import psycopg2
 import psycopg2.extras
-from datetime import datetime, timezone
 from dotenv import load_dotenv
-load_dotenv()
 
+load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+
 def get_pg():
-    """建立 PostgreSQL 連線"""
+    """Get PostgreSQL connection."""
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
-# =====================
-# 初始化：建表
-# =====================
 def init_users_schema():
     ddl = """
     CREATE TABLE IF NOT EXISTS users (
@@ -24,6 +23,7 @@ def init_users_schema():
       email TEXT,
       display_name TEXT,
       plan TEXT NOT NULL DEFAULT 'free',
+      gold INTEGER NOT NULL DEFAULT 0,
       coins INTEGER NOT NULL DEFAULT 0,
       subscribed_until TIMESTAMP WITH TIME ZONE NULL,
       last_login_at TIMESTAMP NULL,
@@ -33,13 +33,12 @@ def init_users_schema():
     """
     with get_pg() as conn, conn.cursor() as cur:
         cur.execute(ddl)
+        # Backfill for existing deployments.
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS gold INTEGER NOT NULL DEFAULT 0;")
         conn.commit()
-    print("✅ users table ready.")
+    print("users table ready.")
 
 
-# =====================
-# 新增或更新使用者（登入時呼叫）
-# =====================
 def upsert_user_basic(user_id: str, provider: str, email: str, display_name: str):
     now = datetime.now(timezone.utc)
     sql = """
@@ -56,9 +55,6 @@ def upsert_user_basic(user_id: str, provider: str, email: str, display_name: str
         conn.commit()
 
 
-# =====================
-# 查詢使用者
-# =====================
 def get_user_by_id(user_id: str) -> dict | None:
     with get_pg() as conn, conn.cursor() as cur:
         cur.execute("SELECT * FROM users WHERE id=%s", (user_id,))
@@ -66,9 +62,6 @@ def get_user_by_id(user_id: str) -> dict | None:
         return dict(row) if row else None
 
 
-# =====================
-# 更新 coins
-# =====================
 def update_user_coins(user_id: str, delta: int):
     sql = """
     UPDATE users
@@ -84,14 +77,29 @@ def update_user_coins(user_id: str, delta: int):
         return row["coins"] if row else 0
 
 
+def update_user_gold(user_id: str, delta: int):
+    sql = """
+    UPDATE users
+    SET gold = gold + %s,
+        updated_at = NOW()
+    WHERE id = %s
+    RETURNING gold;
+    """
+    with get_pg() as conn, conn.cursor() as cur:
+        cur.execute(sql, (delta, user_id))
+        row = cur.fetchone()
+        conn.commit()
+        return row["gold"] if row else 0
+
+
 def add_user_coins(user_id: str, amount: int):
-    """直接增加金幣數（購幣用）"""
     return update_user_coins(user_id, amount)
 
 
-# =====================
-# 更新訂閱方案 / 到期日
-# =====================
+def add_user_gold(user_id: str, amount: int):
+    return update_user_gold(user_id, amount)
+
+
 def update_user_subscription(user_id: str, plan: str = None, until=None):
     fields = []
     values = []
@@ -114,9 +122,6 @@ def update_user_subscription(user_id: str, plan: str = None, until=None):
         return affected
 
 
-# =====================
-# 是否訂閱中
-# =====================
 def is_subscriber(user_row: dict) -> bool:
     if not user_row:
         return False

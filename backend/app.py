@@ -5,7 +5,6 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import time
 import jwt
-from openai import OpenAI
 from billing_repo import init_billing_schema, grant_ad_coins, can_consume_ask
 from users_repo import init_users_schema,get_user_by_id
 from history_repo import (

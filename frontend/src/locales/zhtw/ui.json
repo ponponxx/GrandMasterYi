@@ -1,0 +1,131 @@
+{
+  "app": {
+    "brandIcon": "易",
+    "brandTitle": "太乙玄占",
+    "wallet": {
+      "gold": "金幣",
+      "silver": "銀幣"
+    },
+    "logoutTitle": "登出",
+    "tabs": {
+      "main": {
+        "label": "起卦",
+        "icon": "卦"
+      },
+      "shop": {
+        "label": "靈市",
+        "icon": "市"
+      },
+      "history": {
+        "label": "卦錄",
+        "icon": "錄"
+      },
+      "achievements": {
+        "label": "道途",
+        "icon": "境"
+      }
+    }
+  },
+  "login": {
+    "errors": {
+      "missingIdToken": "Google 登入失敗：未取得 id_token。",
+      "googleFailedDefault": "Google 登入失敗。",
+      "guestFailedDefault": "訪客登入失敗。"
+    },
+    "googleButtonError": "Google 登入視窗失敗。",
+    "brandSeal": "太乙玄占",
+    "title": "入卦",
+    "subtitle": "調息凝神，觀陰陽消長",
+    "appleLoginTitle": "Apple 登入功能即將開啟。",
+    "appleLoginLabel": "Apple 登入（即將開啟）",
+    "orLabel": "或",
+    "guestLoginLabel": "以訪客身分繼續",
+    "yinYangAlt": "太極陰陽圖",
+    "language": {
+      "label": "語言",
+      "options": {
+        "en": "English",
+        "zhtw": "繁體中文"
+      }
+    }
+  },
+  "history": {
+    "title": "卦錄",
+    "subtitle": "命途流轉，皆有跡可循",
+    "tabs": {
+      "offline": "本機卦錄",
+      "cloud": "雲端卦錄"
+    }
+  },
+  "historyCloud": {
+    "alerts": {
+      "pinFailed": "釘選狀態更新失敗。",
+      "loadDetailFailed": "雲端卦錄詳情載入失敗。"
+    },
+    "emptyMessage": "尚無雲端卦錄。",
+    "questionPrefix": "「",
+    "questionSuffix": "」",
+    "metaSeparator": "｜",
+    "detailButtonShow": "詳情",
+    "detailButtonHide": "收合",
+    "pinIconOn": "釘",
+    "pinIconOff": "○",
+    "hexagramTitleTemplate": "第{id}卦：{name}",
+    "summaryJoiner": "，",
+    "sectionHexagramContext": "卦象脈絡",
+    "sectionInterpretation": "宗師解讀",
+    "fallbackHexagramTemplate": "第{code}卦"
+  },
+  "historyOffline": {
+    "emptyMessage": "尚無本機卦錄。",
+    "titleTemplate": "第{id}卦：{name}",
+    "questionPrefix": "「",
+    "questionSuffix": "」",
+    "summaryJoiner": "，",
+    "changingLinesTitle": "變爻"
+  },
+  "shop": {
+    "title": "靈市",
+    "subtitle": "供奉香火，續明問道之路",
+    "cards": {
+      "subscription": {
+        "title": "宗師月契",
+        "descriptionLines": [
+          "不限次起卦與完整解讀。",
+          "優先模型與更深層指引。"
+        ],
+        "price": "NT$ 290",
+        "unit": "/ 月",
+        "button": "立即訂閱"
+      },
+      "goldPack": {
+        "icon": "金",
+        "title": "金幣包",
+        "descriptionLines": [
+          "一次購買，補充解卦金幣。",
+          "適合偶爾深入請示。"
+        ],
+        "price": "NT$ 150",
+        "button": "購買金幣"
+      }
+    },
+    "balance": {
+      "title": "目前餘額",
+      "goldLabel": "金幣",
+      "silverLabel": "銀幣"
+    }
+  },
+  "achievements": {
+    "title": "道途",
+    "subtitle": "六十四卦，皆是修行的刻痕",
+    "seal": "修行境界",
+    "centerMark": "易",
+    "hexagramTitleTemplate": "第{id}卦",
+    "stats": {
+      "discoveredLabel": "已識卦象",
+      "readingsLabel": "累計解卦",
+      "stageLabel": "修行階段"
+    },
+    "footer": "觀變知常，返照本心。"
+  }
+}

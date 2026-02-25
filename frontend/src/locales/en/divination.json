@@ -1,0 +1,49 @@
+{
+  "alerts": {
+    "lookupFailedPrefix": "Failed to load hexagram context: ",
+    "unknownError": "Unknown error",
+    "missingQuestion": "Please enter a question before interpretation.",
+    "interpretationFailedPrefix": "Interpretation failed: ",
+    "adFailed": "Failed to complete ad reward."
+  },
+  "adDialog": {
+    "title": "Need More Coins",
+    "description": "You are out of coins. Watch a rewarded ad to unlock one interpretation, or close and come back later.",
+    "watchButton": "Watch Ad",
+    "cancelButton": "Cancel"
+  },
+  "header": {
+    "title": "DIVINATION",
+    "questionPlaceholder": "Type your question here..."
+  },
+  "status": {
+    "castingLine": "Casting line {line}",
+    "castingDone": "Casting complete",
+    "idleHint": "Press Start Casting to begin.",
+    "loading": "Interpreting..."
+  },
+  "buttons": {
+    "startCasting": "START CASTING",
+    "askAi": "ASK AI TO INTERPRET",
+    "reset": "Reset",
+    "newReading": "Start New Reading"
+  },
+  "localResult": {
+    "seal": "Local Result",
+    "titleTemplate": "Hexagram {id}: {name}",
+    "summaryJoiner": ", ",
+    "throwsLabel": "Throws (from first to sixth):",
+    "changingLinesTitle": "Changing Lines"
+  },
+  "aiResult": {
+    "title": "AI INTERPRETATION",
+    "cornerMark": "YI",
+    "costHint": "(costs 1 credit)"
+  },
+  "tokenUsage": {
+    "title": "Token Usage",
+    "inputLabel": "Input",
+    "outputLabel": "Output",
+    "totalLabel": "Total"
+  }
+}
