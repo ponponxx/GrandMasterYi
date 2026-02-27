@@ -82,15 +82,15 @@ def grant_ad_coins(user_id: str, ad_network: str = "admob"):
         cur.execute(
             """
             UPDATE users
-            SET coins = coins + %s,
+            SET silver_coins = silver_coins + %s,
                 updated_at = NOW()
             WHERE id=%s
-            RETURNING coins;
+            RETURNING silver_coins;
             """,
             (FREE_AD_COINS, user_id),
         )
         row = cur.fetchone()
-        coins = row["coins"] if row else 0
+        coins = row["silver_coins"] if row else 0
         conn.commit()
         return True, coins
 
@@ -139,7 +139,7 @@ def can_consume_ask(user_row: dict):
     with get_pg() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT gold, coins
+            SELECT gold, silver_coins
             FROM users
             WHERE id=%s
             FOR UPDATE
@@ -151,7 +151,7 @@ def can_consume_ask(user_row: dict):
             return False, "no_coins"
 
         gold = int(wallet_row.get("gold") or 0)
-        silver = int(wallet_row.get("coins") or 0)
+        silver = int(wallet_row.get("silver_coins") or 0)
 
         if gold > 0:
             cur.execute(
@@ -160,7 +160,7 @@ def can_consume_ask(user_row: dict):
                 SET gold = gold - 1,
                     updated_at = NOW()
                 WHERE id=%s
-                RETURNING gold, coins;
+                RETURNING gold, silver_coins;
                 """,
                 (user_id,),
             )
@@ -169,17 +169,17 @@ def can_consume_ask(user_row: dict):
             return True, {
                 "consumed": "gold",
                 "remaining_gold": int(updated.get("gold") or 0),
-                "remaining_silver": int(updated.get("coins") or 0),
+                "remaining_silver": int(updated.get("silver_coins") or 0),
             }
 
         if silver > 0:
             cur.execute(
                 """
                 UPDATE users
-                SET coins = coins - 1,
+                SET silver_coins = silver_coins - 1,
                     updated_at = NOW()
                 WHERE id=%s
-                RETURNING gold, coins;
+                RETURNING gold, silver_coins;
                 """,
                 (user_id,),
             )
@@ -188,10 +188,35 @@ def can_consume_ask(user_row: dict):
             return True, {
                 "consumed": "silver",
                 "remaining_gold": int(updated.get("gold") or 0),
-                "remaining_silver": int(updated.get("coins") or 0),
+                "remaining_silver": int(updated.get("silver_coins") or 0),
             }
 
     return False, "no_coins"
+
+
+def refund_consumed_ask(user_id: str, consume_result):
+    if not isinstance(consume_result, dict):
+        return False
+
+    consumed = str(consume_result.get("consumed") or "").strip().lower()
+    if consumed not in {"gold", "silver"}:
+        return False
+
+    column = "gold" if consumed == "gold" else "silver_coins"
+    with get_pg() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"""
+            UPDATE users
+            SET {column} = {column} + 1,
+                updated_at = NOW()
+            WHERE id=%s
+            RETURNING id
+            """,
+            (user_id,),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return bool(row)
 
 
 def record_billing_event(user_id, platform, product_id, purchase_token, event_type, amount=None):

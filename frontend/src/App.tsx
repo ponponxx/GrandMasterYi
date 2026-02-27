@@ -127,7 +127,7 @@ const App: React.FC = () => {
           <History />
         </section>
         <section className={activeTab === 'achievements' ? 'block' : 'hidden'}>
-          <Achievements />
+          <Achievements user={user} />
         </section>
       </main>
 

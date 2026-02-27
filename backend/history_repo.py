@@ -216,6 +216,21 @@ def set_pin(user_id, reading_id, pin):
         conn.commit()
         return bool(row)
 
+
+def delete_reading(user_id, reading_id):
+    with get_pg() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            DELETE FROM readings
+            WHERE id=%s AND user_id=%s
+            RETURNING id
+            """,
+            (reading_id, user_id),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return bool(row)
+
 # =====================
 # 清理過期紀錄
 # =====================

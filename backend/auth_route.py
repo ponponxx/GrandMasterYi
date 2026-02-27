@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 
-from users_repo import get_user_by_id, upsert_user_basic
+from users_repo import get_or_create_user_by_provider, get_user_by_id
 
 load_dotenv()
 
@@ -66,14 +66,17 @@ def _to_user_profile(user: dict) -> dict:
     raw_plan = str(user.get("plan") or "free").lower()
     plan = "pro" if raw_plan in PRO_PLAN_VALUES else "free"
     gold = int(user.get("gold") or 0)
-    coins = int(user.get("coins") or 0)
+    coins = int(user.get("silver_coins") or user.get("coins") or 0)
     if gold < 0:
         gold = 0
     if coins < 0:
         coins = 0
+    ask_count = int(user.get("ask_count") or 0)
+    if ask_count < 0:
+        ask_count = 0
 
     return {
-        "id": user["id"],
+        "id": str(user["id"]),
         "email": user.get("email"),
         "display_name": user.get("display_name"),
         "subscription": {
@@ -86,6 +89,8 @@ def _to_user_profile(user: dict) -> dict:
             "gold": gold,
             "silver": coins,
         },
+        "ask_count": ask_count,
+        "askCount": ask_count,
         "history_limit": DEFAULT_HISTORY_LIMIT,
     }
 
@@ -113,14 +118,13 @@ def auth_login():
     if not user_info:
         return jsonify({"error": "invalid_id_token"}), 401
 
-    user_id = f"google:{user_info['sub']}"
+    provider_uid = str(user_info["sub"])
     email = user_info.get("email", "")
     name = user_info.get("name", "")
 
     try:
-        upsert_user_basic(user_id, provider, email, name)
-        user = get_user_by_id(user_id)
-        token, _ = create_session_token(user_id)
+        user = get_or_create_user_by_provider(provider=provider, provider_uid=provider_uid, email=email, display_name=name)
+        token, _ = create_session_token(str(user["id"]))
         return jsonify({"token": token, "user": _to_user_profile(user)})
     except Exception as exc:
         return jsonify({"error": "server_error", "details": str(exc)}), 500
@@ -129,18 +133,18 @@ def auth_login():
 @auth_bp.route("/fake_login", methods=["POST"])
 def fake_login():
     data = request.get_json(silent=True) or {}
-    user_id = data.get("user_id")
-    if not isinstance(user_id, str) or not user_id.strip():
-        user_id = "google:test_user_123"
-    user_id = user_id.strip()
+    provider_uid = data.get("user_id")
+    if not isinstance(provider_uid, str) or not provider_uid.strip():
+        provider_uid = "test_user_123"
+    provider_uid = provider_uid.strip()
 
-    upsert_user_basic(
-        user_id=user_id,
+    user = get_or_create_user_by_provider(
         provider="google",
+        provider_uid=provider_uid,
         email="test@example.com",
         display_name="TestUser",
     )
-    session_token, _ = create_session_token(user_id)
+    session_token, _ = create_session_token(str(user["id"]))
     return jsonify({"token": session_token})
 
 

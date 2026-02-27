@@ -123,14 +123,25 @@ def _extract_usage(payload: dict) -> dict | None:
         return None
 
     input_tokens = usage_meta.get("promptTokenCount")
+    cached_tokens = usage_meta.get("cachedContentTokenCount")
+    thoughts_tokens = usage_meta.get("thoughtsTokenCount")
     output_tokens = usage_meta.get("candidatesTokenCount")
     total_tokens = usage_meta.get("totalTokenCount")
 
-    if input_tokens is None and output_tokens is None and total_tokens is None:
+    if (
+        input_tokens is None
+        and cached_tokens is None
+        and thoughts_tokens is None
+        and output_tokens is None
+        and total_tokens is None
+    ):
         return None
 
     return {
         "input_tokens": int(input_tokens or 0),
+        "cached_tokens": int(cached_tokens or 0),
+        "thoughts_tokens": int(thoughts_tokens or 0),
+        "thoughts_token": int(thoughts_tokens or 0),
         "output_tokens": int(output_tokens or 0),
         "total_tokens": int(total_tokens or 0),
     }

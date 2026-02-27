@@ -35,6 +35,10 @@ interface PinHistoryResponse {
   ok: boolean;
 }
 
+interface DeleteHistoryResponse {
+  ok: boolean;
+}
+
 export interface DivinationStreamResult {
   tokenUsage: TokenUsage | null;
 }
@@ -206,6 +210,9 @@ class ApiService {
           const parsed = JSON.parse(payloadRaw);
           tokenUsage = {
             input_tokens: Number(parsed?.input_tokens ?? 0),
+            cached_tokens: Number(parsed?.cached_tokens ?? 0),
+            thoughts_tokens: Number(parsed?.thoughts_tokens ?? parsed?.thoughts_token ?? 0),
+            thoughts_token: Number(parsed?.thoughts_token ?? parsed?.thoughts_tokens ?? 0),
             output_tokens: Number(parsed?.output_tokens ?? 0),
             total_tokens: Number(parsed?.total_tokens ?? 0),
           };
@@ -240,6 +247,15 @@ class ApiService {
       body: JSON.stringify({
         reading_id: readingId,
         is_pinned: isPinned,
+      }),
+    });
+  }
+
+  async deleteHistory(readingId: number): Promise<DeleteHistoryResponse> {
+    return this.request<DeleteHistoryResponse>('/history/delete', {
+      method: 'POST',
+      body: JSON.stringify({
+        reading_id: readingId,
       }),
     });
   }

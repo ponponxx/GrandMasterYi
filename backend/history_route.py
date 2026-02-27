@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 
 from auth_route import decode_session_token
 from history_repo import (
+    delete_reading,
     get_history_detail,
     get_pg,
     list_history,
@@ -87,6 +88,8 @@ def list_user_history():
                 "question": row.get("question", ""),
                 "created_at": _to_iso_or_now(row.get("created_at")),
                 "is_pinned": bool(row.get("is_pinned", False)),
+                "hexagram_code": row.get("hexagram_code", ""),
+                "changing_lines": row.get("changing_lines") or [],
             }
             for row in rows
         ]
@@ -174,4 +177,28 @@ def history_sync():
             traceback.print_exc()
 
     return jsonify({"ok": True, "saved_count": len(saved_ids), "saved_ids": saved_ids})
+
+
+@history_bp.route("/delete", methods=["POST"])
+def history_delete():
+    user_id, err_resp, code = _get_user_from_auth()
+    if not user_id:
+        return err_resp, code
+
+    data = request.get_json(silent=True) or {}
+    reading_id = data.get("reading_id")
+
+    try:
+        reading_id = int(reading_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "missing_or_invalid_fields"}), 400
+
+    try:
+        ok = delete_reading(user_id, reading_id)
+        if not ok:
+            return jsonify({"error": "not_found_or_no_permission"}), 404
+        return jsonify({"ok": True})
+    except Exception:
+        traceback.print_exc()
+        return jsonify({"error": "server_error"}), 500
 

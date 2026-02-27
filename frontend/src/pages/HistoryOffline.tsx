@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { useI18n } from '../i18n';
-import { listOfflineReadings, OfflineReadingRecord } from '../services/offlineHistoryDb';
+import { deleteOfflineReading, listOfflineReadings, OfflineReadingRecord } from '../services/offlineHistoryDb';
 
 const fillTemplate = (template: string, vars: Record<string, string | number>) => {
   let out = template;
@@ -16,6 +16,7 @@ const HistoryOffline: React.FC = () => {
   const t = messages.ui.historyOffline;
   const [items, setItems] = useState<OfflineReadingRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -30,6 +31,22 @@ const HistoryOffline: React.FC = () => {
     };
     load();
   }, []);
+
+  const handleDelete = async (id?: number) => {
+    if (typeof id !== 'number') {
+      return;
+    }
+    setDeletingId(id);
+    try {
+      await deleteOfflineReading(id);
+      setItems((prev) => prev.filter((item) => item.id !== id));
+    } catch (error) {
+      console.error(error);
+      alert('Delete failed');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -50,7 +67,19 @@ const HistoryOffline: React.FC = () => {
   return (
     <div className="space-y-6">
       {items.map((item) => (
-        <article key={item.id} className="bg-white border-2 border-neutral-100 p-8 rounded-sm shadow-sm space-y-4">
+        <article
+          key={item.id ?? `${item.created_at}-${item.hexagram_code}`}
+          className="bg-white border-2 border-neutral-100 p-8 rounded-sm shadow-sm space-y-4 relative"
+        >
+          <button
+            disabled={deletingId === item.id}
+            onClick={() => handleDelete(item.id)}
+            className="absolute top-3 right-3 w-7 h-7 border border-neutral-300 text-neutral-400 hover:text-red-700 hover:border-red-700 transition"
+            title="Delete"
+            aria-label="Delete"
+          >
+            X
+          </button>
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-xl font-black text-neutral-900">
               {fillTemplate(t.titleTemplate, { id: item.hexagram_id, name: item.display_name })}

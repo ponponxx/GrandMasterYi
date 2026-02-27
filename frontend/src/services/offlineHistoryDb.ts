@@ -3,6 +3,7 @@ import type { IChingValue } from '../utils/iching';
 const DB_NAME = 'masteryi_local';
 const DB_VERSION = 1;
 const OFFLINE_READINGS_STORE = 'offline_readings';
+const OFFLINE_HISTORY_UPDATED_EVENT = 'offline-history-updated';
 
 export interface OfflineReadingRecord {
   id?: number;
@@ -64,6 +65,12 @@ function withStore<T>(
   });
 }
 
+function emitOfflineHistoryUpdated() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(OFFLINE_HISTORY_UPDATED_EVENT));
+  }
+}
+
 export async function saveOfflineReading(
   input: Omit<OfflineReadingRecord, 'id' | 'created_at'> & { created_at?: string }
 ): Promise<number> {
@@ -74,7 +81,10 @@ export async function saveOfflineReading(
 
   return withStore<number>('readwrite', (store, resolve, reject) => {
     const request = store.add(record);
-    request.onsuccess = () => resolve(Number(request.result));
+    request.onsuccess = () => {
+      emitOfflineHistoryUpdated();
+      resolve(Number(request.result));
+    };
     request.onerror = () => reject(request.error || new Error('offline_reading_save_failed'));
   });
 }
@@ -90,3 +100,16 @@ export async function listOfflineReadings(limit = 200): Promise<OfflineReadingRe
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, limit);
 }
+
+export async function deleteOfflineReading(id: number): Promise<void> {
+  await withStore<void>('readwrite', (store, resolve, reject) => {
+    const request = store.delete(id);
+    request.onsuccess = () => {
+      emitOfflineHistoryUpdated();
+      resolve();
+    };
+    request.onerror = () => reject(request.error || new Error('offline_reading_delete_failed'));
+  });
+}
+
+export { OFFLINE_HISTORY_UPDATED_EVENT };

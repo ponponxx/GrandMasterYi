@@ -73,7 +73,7 @@ def get_subscription_status():
         return jsonify({"error": "user_not_found"}), 404
 
     gold = int(user.get("gold") or 0)
-    silver = int(user.get("coins") or 0)
+    silver = int(user.get("silver_coins") or user.get("coins") or 0)
     return jsonify(
         {
             "plan": user.get("plan", "free"),

@@ -19,6 +19,8 @@ interface LocalResult {
   lines: string;
 }
 
+const MAX_QUESTION_LENGTH = 1000;
+
 const fillTemplate = (template: string, vars: Record<string, string | number>) => {
   let out = template;
   Object.entries(vars).forEach(([key, value]) => {
@@ -58,6 +60,8 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
       title: t.tokenUsage.title,
       input_label: t.tokenUsage.inputLabel,
       input_tokens: usage.input_tokens,
+      cached_tokens: usage.cached_tokens ?? 0,
+      thoughts_tokens: usage.thoughts_tokens ?? usage.thoughts_token ?? 0,
       output_label: t.tokenUsage.outputLabel,
       output_tokens: usage.output_tokens,
       total_label: t.tokenUsage.totalLabel,
@@ -125,6 +129,10 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
       alert(t.alerts.missingQuestion);
       return;
     }
+    if (trimmedQuestion.length > MAX_QUESTION_LENGTH) {
+      alert(`問題長度不可超過 ${MAX_QUESTION_LENGTH} 字。`);
+      return;
+    }
 
     setLoading(true);
     const initialReading = createEmptyAiReading();
@@ -159,8 +167,11 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
       const updatedProfile = await api.getMe();
       onUserUpdate(updatedProfile);
     } catch (error: any) {
+      setAiReading(null);
       if (error.message === 'INSUFFICIENT_FUNDS') {
         setShowAdDialog(true);
+      } else if (String(error?.message || '').includes('missing_or_invalid_fields')) {
+        alert(`送出失敗：問題最多 ${MAX_QUESTION_LENGTH} 字，且必須完成六次擲筊。`);
       } else {
         alert(`${t.alerts.interpretationFailedPrefix}${error.message}`);
       }
@@ -242,6 +253,7 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             disabled={isThrowing || loading}
+            maxLength={MAX_QUESTION_LENGTH}
             placeholder={t.header.questionPlaceholder}
             className="w-full bg-transparent border-b-2 border-neutral-300 p-6 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 transition-all min-h-[100px] resize-none text-center font-serif-tc text-xl"
           />

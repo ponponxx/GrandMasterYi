@@ -22,6 +22,8 @@ export interface UserProfile {
   display_name?: string | null;
   subscription: SubscriptionInfo;
   wallet: WalletInfo;
+  ask_count?: number;
+  askCount?: number;
   history_limit: number;
 }
 
@@ -42,6 +44,9 @@ export interface DivinationRequest {
 
 export interface TokenUsage {
   input_tokens: number;
+  cached_tokens?: number;
+  thoughts_tokens?: number;
+  thoughts_token?: number;
   output_tokens: number;
   total_tokens: number;
 }
@@ -52,6 +57,7 @@ export interface DivinationJsonResponse {
   changing_lines: number[];
   content: string;
   saved_to_history: boolean;
+  ask_count?: number | null;
   token_usage?: TokenUsage | null;
 }
 
@@ -60,6 +66,8 @@ export interface HistoryListItem {
   question: string;
   created_at: string;
   is_pinned: boolean;
+  hexagram_code?: string;
+  changing_lines?: number[];
 }
 
 export interface HistoryListResponse {

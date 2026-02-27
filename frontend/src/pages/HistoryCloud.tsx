@@ -29,6 +29,8 @@ const HistoryCloud: React.FC = () => {
   const [history, setHistory] = useState<HistoryListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [pinningId, setPinningId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [details, setDetails] = useState<DetailState>({});
@@ -102,6 +104,48 @@ const HistoryCloud: React.FC = () => {
     }
   };
 
+  const openDeleteConfirm = (readingId: number) => {
+    setConfirmDeleteId(readingId);
+  };
+
+  const cancelDelete = () => {
+    setConfirmDeleteId(null);
+  };
+
+  const handleDelete = async () => {
+    if (confirmDeleteId === null) {
+      return;
+    }
+
+    const readingId = confirmDeleteId;
+    setDeletingId(readingId);
+    try {
+      await api.deleteHistory(readingId);
+      setHistory((prev) => prev.filter((item) => item.reading_id !== readingId));
+      setExpanded((prev) => {
+        const next = { ...prev };
+        delete next[readingId];
+        return next;
+      });
+      setDetails((prev) => {
+        const next = { ...prev };
+        delete next[readingId];
+        return next;
+      });
+      setHexagrams((prev) => {
+        const next = { ...prev };
+        delete next[readingId];
+        return next;
+      });
+      setConfirmDeleteId(null);
+    } catch (error) {
+      console.error(error);
+      alert('Failed to delete cloud history.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[320px]">
@@ -120,6 +164,31 @@ const HistoryCloud: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {confirmDeleteId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm bg-white border-2 border-neutral-900 p-6 rounded-sm shadow-2xl">
+            <h3 className="text-xl font-black text-neutral-900 tracking-wide">刪除雲端紀錄</h3>
+            <p className="text-neutral-600 mt-3 text-sm leading-relaxed">確定要刪除這筆雲端占卜紀錄嗎？此操作無法復原。</p>
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={handleDelete}
+                disabled={deletingId === confirmDeleteId}
+                className="flex-1 py-2 border border-red-700 bg-red-700 text-white text-sm tracking-widest hover:bg-red-800 transition"
+              >
+                確認刪除
+              </button>
+              <button
+                onClick={cancelDelete}
+                disabled={deletingId === confirmDeleteId}
+                className="flex-1 py-2 border border-neutral-300 text-neutral-700 text-sm tracking-widest hover:border-neutral-900 hover:text-neutral-900 transition"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {history.map((item) => {
         const detail = details[item.reading_id];
         const context = hexagrams[item.reading_id];
@@ -161,6 +230,13 @@ const HistoryCloud: React.FC = () => {
                   }`}
                 >
                   {item.is_pinned ? <span className="text-xl">{t.pinIconOn}</span> : <span className="text-xl">{t.pinIconOff}</span>}
+                </button>
+                <button
+                  disabled={deletingId === item.reading_id}
+                  onClick={() => openDeleteConfirm(item.reading_id)}
+                  className="px-3 py-2 border border-neutral-300 text-xs tracking-widest text-neutral-500 hover:text-red-700 hover:border-red-700 transition"
+                >
+                  刪除
                 </button>
               </div>
             </div>
