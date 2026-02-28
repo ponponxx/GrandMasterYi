@@ -211,10 +211,11 @@ class ApiService {
           tokenUsage = {
             input_tokens: Number(parsed?.input_tokens ?? 0),
             cached_tokens: Number(parsed?.cached_tokens ?? 0),
-            thoughts_tokens: Number(parsed?.thoughts_tokens ?? parsed?.thoughts_token ?? 0),
-            thoughts_token: Number(parsed?.thoughts_token ?? parsed?.thoughts_tokens ?? 0),
+            thoughts_tokens: Number(parsed?.thoughts_tokens ?? 0),
             output_tokens: Number(parsed?.output_tokens ?? 0),
             total_tokens: Number(parsed?.total_tokens ?? 0),
+            finish_reason: typeof parsed?.finish_reason === 'string' ? parsed.finish_reason : undefined,
+            model: typeof parsed?.model === 'string' ? parsed.model : undefined,
           };
         } catch {
           tokenUsage = null;

@@ -9,11 +9,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
-DEFAULT_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-2.0-flash")
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"
+#DEFAULT_GEMINI_MODEL = "gemini-2.5-Pro"
+DEFAULT_FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-3-flash-preview")
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 MAX_RETRIES = 2
-REQUEST_TIMEOUT_SECONDS = 90
+REQUEST_CONNECT_TIMEOUT_SECONDS = 10
+REQUEST_READ_TIMEOUT_SECONDS = 300
+DEFAULT_TEMPERATURE = 0.2
+DEFAULT_MAX_OUTPUT_TOKENS = 2048
 
 
 class LLMServiceError(RuntimeError):
@@ -37,6 +41,44 @@ def _resolve_models():
         if model and model not in models:
             models.append(model)
     return models
+
+
+def _parse_float_env(var_name: str, default_value: float) -> float:
+    raw = (os.getenv(var_name) or "").strip()
+    if not raw:
+        return default_value
+    try:
+        return float(raw)
+    except ValueError:
+        return default_value
+
+
+def _parse_int_env(var_name: str, default_value: int) -> int:
+    raw = (os.getenv(var_name) or "").strip()
+    if not raw:
+        return default_value
+    try:
+        return int(raw)
+    except ValueError:
+        return default_value
+
+
+def _resolve_generation_config() -> dict:
+    temperature = _parse_float_env("GEMINI_TEMPERATURE", DEFAULT_TEMPERATURE)
+    max_output_tokens = _parse_int_env("GEMINI_MAX_OUTPUT_TOKENS", DEFAULT_MAX_OUTPUT_TOKENS)
+
+    config = {
+        "temperature": temperature,
+        "maxOutputTokens": max_output_tokens,
+    }
+
+    stop_sequences_raw = (os.getenv("GEMINI_STOP_SEQUENCES") or "").strip()
+    if stop_sequences_raw:
+        stop_sequences = [s.strip() for s in stop_sequences_raw.split(",") if s.strip()]
+        if stop_sequences:
+            config["stopSequences"] = stop_sequences[:5]
+
+    return config
 
 
 def _extract_error_message(response: requests.Response) -> str:
@@ -66,7 +108,7 @@ def _request_stream(model: str, payload: dict, api_key: str) -> requests.Respons
                 params={"alt": "sse", "key": api_key},
                 json=payload,
                 stream=True,
-                timeout=REQUEST_TIMEOUT_SECONDS,
+                timeout=(REQUEST_CONNECT_TIMEOUT_SECONDS, REQUEST_READ_TIMEOUT_SECONDS),
             )
         except requests.RequestException as exc:
             last_error = LLMServiceError(
@@ -141,10 +183,20 @@ def _extract_usage(payload: dict) -> dict | None:
         "input_tokens": int(input_tokens or 0),
         "cached_tokens": int(cached_tokens or 0),
         "thoughts_tokens": int(thoughts_tokens or 0),
-        "thoughts_token": int(thoughts_tokens or 0),
         "output_tokens": int(output_tokens or 0),
         "total_tokens": int(total_tokens or 0),
     }
+
+
+def _extract_finish_reason(payload: dict) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    candidates = payload.get("candidates") or []
+    for candidate in candidates:
+        finish_reason = candidate.get("finishReason")
+        if isinstance(finish_reason, str) and finish_reason.strip():
+            return finish_reason.strip()
+    return None
 
 
 def _iter_sse_data(response: requests.Response):
@@ -176,14 +228,16 @@ def generate_divination(system_prompt, user_prompt, usage_callback: Callable[[di
         raise RuntimeError("Missing GEMINI_API_KEY in environment.")
 
     payload = {
-        "system_instruction": {"parts": [{"text": system_prompt or ""}]},
+        "systemInstruction": {"parts": [{"text": system_prompt or ""}]},
         "contents": [{"role": "user", "parts": [{"text": user_prompt or ""}]}],
+        "generationConfig": _resolve_generation_config(),
     }
 
     errors = []
     models = _resolve_models()
     for index, model in enumerate(models):
         latest_usage = None
+        latest_finish_reason = None
         try:
             response = _request_stream(model, payload, api_key)
         except LLMServiceError as exc:
@@ -212,14 +266,21 @@ def generate_divination(system_prompt, user_prompt, usage_callback: Callable[[di
                         usage = _extract_usage(item)
                         if usage:
                             latest_usage = usage
+                        finish_reason = _extract_finish_reason(item)
+                        if finish_reason:
+                            latest_finish_reason = finish_reason
             except requests.RequestException as exc:
                 raise LLMServiceError(
                     f"gemini_stream_error:{model}:{exc}",
                     status_code=503,
                     retryable=True,
                 ) from exc
-        if usage_callback and latest_usage:
-            usage_callback(latest_usage)
+        if usage_callback and (latest_usage or latest_finish_reason):
+            usage_payload = dict(latest_usage or {})
+            if latest_finish_reason:
+                usage_payload["finish_reason"] = latest_finish_reason
+            usage_payload["model"] = model
+            usage_callback(usage_payload)
         return
 
     error_message = " | ".join(errors) if errors else "gemini_no_models_available"

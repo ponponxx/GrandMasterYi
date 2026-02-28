@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import traceback
+from datetime import datetime, timezone
 
 from flask import Blueprint, Response, jsonify, request
 
@@ -16,10 +17,29 @@ ask_bp = Blueprint("ask", __name__)
 SYSTEM_PROMPT = (
     "You are an I Ching divination Master. "
     "Use only the provided hexagram/judgment/line-text context from database as primary evidence. "
-    "Write in Traditional Chinese, practical and specific, and avoid inventing missing classics text."
+    "Write in Traditional Chinese, practical and specific. "
+    "Do not fabricate missing classics text or historical stories. "
+    "Do not guarantee outcomes."
+)
+PROMPT_FINAL_INSTRUCTIONS = (
+    "<Instructions>\n"
+    "請嚴格按照以下 XML 格式輸出你的推演與回答：\n\n"
+    "<Thinking>\n"
+    "(請用繁體中文進行思考：\n"
+    "1. 分析問題：問卦者求問的是哪個範疇（人/事/時/地/物），若同時含多個範疇需分別處理。\n"
+    "2. 提取線索：從 <Hints> 中找出對應範疇的關鍵字。\n"
+    "3. 卦象推演：結合卦名、卦辭與動爻爻辭意象，推斷目前處境與後續走向。\n"
+    "4. 擬定建議：給出具體可執行的行動方案，並指出明確時間點。)\n"
+    "</Thinking>\n\n"
+    "<Final_Answer>\n"
+    "(請以易經宗師的口吻，直接給出一段通順、有深度、帶有古風且實用的解卦文。"
+    "必須包含對時間與困難的具體看法。請勿使用「1. 2. 3.」這類生硬條列式。)\n"
+    "</Final_Answer>\n"
+    "</Instructions>"
 )
 
 ICHING_DB_PATH = os.path.join(os.path.dirname(__file__), "iching.db")
+DEBUG_PROMPT_DIR = os.path.join(os.path.dirname(__file__), "debug_prompts")
 TOKEN_USAGE_MARKER = "\n[[[TOKEN_USAGE]]]"
 MAX_QUESTION_LENGTH = 1000
 TRIGRAM_MAP_TOP_DOWN = {
@@ -32,6 +52,11 @@ TRIGRAM_MAP_TOP_DOWN = {
     "001": ("震", "雷"),
     "000": ("坤", "地"),
 }
+
+try:
+    os.makedirs(DEBUG_PROMPT_DIR, exist_ok=True)
+except Exception:
+    traceback.print_exc()
 
 
 def _get_user_id_from_bearer():
@@ -162,7 +187,15 @@ def _load_iching_context(throws):
             placeholders = ",".join(["?"] * len(changing_positions))
             cur.execute(
                 f"""
-                SELECT position, position_num, text
+                SELECT
+                    position,
+                    position_num,
+                    text,
+                    person_hint,
+                    event_hint,
+                    time_hint,
+                    place_hint,
+                    object_hint
                 FROM lines
                 WHERE hexagram_id = ?
                   AND position_num IN ({placeholders})
@@ -197,38 +230,114 @@ def _build_user_prompt(question, context, user_name, client_context):
     top = context["top_down_yinyang"]
     yinyang_summary = f"{' '.join(top[:3])} {' '.join(top[3:])}"
 
-    parts = [
+    changing_line_texts = []
+    line_hints = []
+    for row in context.get("changing_line_rows", []):
+        position = (row.get("position") or "").strip()
+        text = (row.get("text") or "").strip()
+        if position and text:
+            changing_line_texts.append(f"- {position}: {text}")
+        elif text:
+            changing_line_texts.append(f"- {text}")
+
+        line_hints.append(
+            {
+                "position": position or f"line-{row.get('position_num')}",
+                "hints": {
+                    "person": (row.get("person_hint") or "").strip(),
+                    "event": (row.get("event_hint") or "").strip(),
+                    "time": (row.get("time_hint") or "").strip(),
+                    "place": (row.get("place_hint") or "").strip(),
+                    "object": (row.get("object_hint") or "").strip(),
+                },
+            }
+        )
+
+    context_parts = [
+        "<Context>",
         f"Question: {question}",
-        f"Throws(original from frontend): {context['original_throws']}",
-        f"Reversed throws(for lookup): {context['reversed_throws']}",
+        f"Throws: {context['original_throws']}",
+        f"Reversed throws: {context['reversed_throws']}",
         f"Top-down yin/yang: {yinyang_summary}",
-        f"Upper trigram: {upper['name']}({upper['element']}) bits={upper['bits']}",
-        f"Lower trigram: {lower['name']}({lower['element']}) bits={lower['bits']}",
+        f"Upper trigram: {upper['name']}({upper['element']})",
+        f"Lower trigram: {lower['name']}({lower['element']})",
         f"Hexagram: {context['hexagram_name']}",
         f"Hexagram code: {context['hexagram_code']}",
         f"Judgment: {context['judgment']}",
+        f"Changing line positions: {context['changing_positions']}",
+        f"Changing line names: {context['changing_line_names']}",
+        "Changing line texts:",
+        "\n".join(changing_line_texts) if changing_line_texts else "- none",
     ]
 
-    if context["changing_positions"]:
-        parts.append(f"Changing line positions: {context['changing_positions']}")
-        parts.append(f"Changing line names(from throws): {context['changing_line_names']}")
-        if context["changing_line_rows"]:
-            parts.append("Changing line texts from DB:")
-            for row in context["changing_line_rows"]:
-                parts.append(f"- {row['position']}: {row['text']}")
-        else:
-            parts.append("Changing line texts from DB: none found")
-    else:
-        parts.append("Changing lines: none")
-
     if user_name:
-        parts.append(f"User name: {user_name}")
-
+        context_parts.append(f"User name: {user_name}")
     if client_context:
-        parts.append(f"Client context: {client_context}")
+        context_parts.append(f"Client context: {client_context}")
+    context_parts.append("</Context>")
 
-    parts.append("Please provide: overall reading, key risks, and 3 actionable suggestions.")
-    return "\n".join(parts)
+    hints_block = "\n".join(
+        [
+            "<Hints>",
+            json.dumps(line_hints, ensure_ascii=False, indent=2),
+            "</Hints>",
+        ]
+    )
+
+    return "\n\n".join(
+        [
+            "\n".join(context_parts),
+            hints_block,
+            PROMPT_FINAL_INSTRUCTIONS,
+        ]
+    )
+
+
+def _safe_filename_component(value, default):
+    raw = str(value or "").strip()
+    if not raw:
+        return default
+    sanitized = "".join(ch if (ch.isalnum() or ch in {"-", "_"}) else "_" for ch in raw)
+    sanitized = sanitized.strip("_")
+    if not sanitized:
+        return default
+    return sanitized[:60]
+
+
+def _debug_log_prompt_markdown(user_id, question, hexagram_code, changing_lines, system_prompt, user_prompt):
+    try:
+        os.makedirs(DEBUG_PROMPT_DIR, exist_ok=True)
+
+        timestamp = datetime.now(timezone.utc)
+        ts_for_file = timestamp.strftime("%Y%m%d_%H%M%S_%f")
+        ts_iso = timestamp.isoformat().replace("+00:00", "Z")
+        safe_user = _safe_filename_component(user_id, "anonymous")
+        safe_hex = _safe_filename_component(hexagram_code, "unknown_hex")
+        filename = f"{ts_for_file}_{safe_user}_{safe_hex}.md"
+        path = os.path.join(DEBUG_PROMPT_DIR, filename)
+
+        question_text = (question or "").strip()
+        changing_lines_json = json.dumps(changing_lines or [], ensure_ascii=False)
+
+        with open(path, "w", encoding="utf-8") as file:
+            file.write("# Ask Prompt Debug Log\n\n")
+            file.write(f"- created_at_utc: `{ts_iso}`\n")
+            file.write(f"- user_id: `{user_id or ''}`\n")
+            file.write(f"- hexagram_code: `{hexagram_code or ''}`\n")
+            file.write(f"- changing_lines: `{changing_lines_json}`\n")
+            file.write(f"- question: `{question_text}`\n\n")
+
+            file.write("## System Prompt\n\n")
+            file.write("```text\n")
+            file.write(f"{system_prompt or ''}\n")
+            file.write("```\n\n")
+
+            file.write("## User Prompt\n\n")
+            file.write("```text\n")
+            file.write(f"{user_prompt or ''}\n")
+            file.write("```\n")
+    except Exception:
+        traceback.print_exc()
 
 
 def _save_reading(user_id, question, hexagram_code, changing_lines, content):
@@ -275,7 +384,7 @@ def _format_context_response(context):
         position = (row.get("position") or "").strip()
         text = (row.get("text") or "").strip()
         if position and text:
-            line_texts.append(f"{position}，{text}")
+            line_texts.append(f"{position}: {text}")
         elif text:
             line_texts.append(text)
 
@@ -359,6 +468,14 @@ def ask_main():
         user_name,
         client_context,
     )
+    _debug_log_prompt_markdown(
+        user_id=user_id,
+        question=question,
+        hexagram_code=hexagram_code,
+        changing_lines=changing_lines,
+        system_prompt=SYSTEM_PROMPT,
+        user_prompt=llm_user_prompt,
+    )
 
     accept_header = (request.headers.get("Accept") or "").lower()
     wants_json = "application/json" in accept_header and "text/plain" not in accept_header
@@ -436,3 +553,4 @@ def ask_main():
                 _refund_if_needed(user_id, consume_result)
 
     return Response(stream_response(), mimetype="text/plain")
+

@@ -61,11 +61,13 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
       input_label: t.tokenUsage.inputLabel,
       input_tokens: usage.input_tokens,
       cached_tokens: usage.cached_tokens ?? 0,
-      thoughts_tokens: usage.thoughts_tokens ?? usage.thoughts_token ?? 0,
+      thoughts_tokens: usage.thoughts_tokens ?? 0,
       output_label: t.tokenUsage.outputLabel,
       output_tokens: usage.output_tokens,
       total_label: t.tokenUsage.totalLabel,
       total_tokens: usage.total_tokens,
+      finish_reason: usage.finish_reason ?? null,
+      model: usage.model ?? null,
     });
   };
 

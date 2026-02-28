@@ -46,9 +46,10 @@ export interface TokenUsage {
   input_tokens: number;
   cached_tokens?: number;
   thoughts_tokens?: number;
-  thoughts_token?: number;
   output_tokens: number;
   total_tokens: number;
+  finish_reason?: string;
+  model?: string;
 }
 
 export interface DivinationJsonResponse {
