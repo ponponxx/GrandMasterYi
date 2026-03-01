@@ -6,7 +6,11 @@ import HistoryOffline from './HistoryOffline';
 
 type HistoryTab = 'offline' | 'cloud';
 
-const History: React.FC = () => {
+interface HistoryProps {
+  reloadToken?: number;
+}
+
+const History: React.FC<HistoryProps> = ({ reloadToken = 0 }) => {
   const { messages } = useI18n();
   const t = messages.ui.history;
   const [tab, setTab] = useState<HistoryTab>('offline');
@@ -37,7 +41,7 @@ const History: React.FC = () => {
         </button>
       </div>
 
-      {tab === 'offline' ? <HistoryOffline /> : <HistoryCloud />}
+      {tab === 'offline' ? <HistoryOffline reloadToken={reloadToken} /> : <HistoryCloud reloadToken={reloadToken} />}
     </div>
   );
 };

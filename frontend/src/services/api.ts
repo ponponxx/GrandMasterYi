@@ -43,6 +43,9 @@ interface DeleteHistoryResponse {
 
 export interface DivinationStreamResult {
   tokenUsage: TokenUsage | null;
+  content: string;
+  finalAnswer: string;
+  interpretation: string;
 }
 
 class ApiService {
@@ -157,11 +160,13 @@ class ApiService {
     }
 
     if (!response.body) {
-      return { tokenUsage: null };
+      return { tokenUsage: null, content: '', finalAnswer: '', interpretation: '' };
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
+    let rawResponseBuffer = '';
+    let visibleOutput = '';
     let streamBuffer = '';
     let usageBuffer = '';
     let readingUsagePayload = false;
@@ -171,7 +176,42 @@ class ApiService {
     let sentenceBuffer = '';
     let hasVisibleOutput = false;
 
-    const isSentenceBoundary = (char: string) => '。！？!?；;.\n\r'.includes(char);
+    const isSentenceBoundary = (char: string) => '!?.,;\n\r\u3002\uFF01\uFF1F'.includes(char);
+    const stripXmlTags = (text: string) =>
+      text
+        .replace(/<[^>]+>/g, '')
+        .replace(/\r/g, '')
+        .trim();
+    const extractStructuredContent = (rawText: string, fallbackText: string) => {
+      const finalMatch = rawText.match(
+        /<\s*Final(?:\s|_)*Answer\s*>([\s\S]*?)<\s*\/\s*Final(?:\s|_)*Answer\s*>/i
+      );
+      const interpretationMatch = rawText.match(
+        /<\s*Interpretation(?:\s|_)*Flow\s*>([\s\S]*?)<\s*\/\s*Interpretation(?:\s|_)*Flow\s*>/i
+      );
+      const finalText = stripXmlTags(finalMatch?.[1] || '');
+      const interpretationText = stripXmlTags(interpretationMatch?.[1] || '') || fallbackText.trim();
+
+      if (!finalText) {
+        return {
+          finalAnswer: '',
+          interpretation: interpretationText,
+          content: interpretationText,
+        };
+      }
+      if (!interpretationText) {
+        return {
+          finalAnswer: finalText,
+          interpretation: '',
+          content: finalText,
+        };
+      }
+      return {
+        finalAnswer: finalText,
+        interpretation: interpretationText,
+        content: `${finalText}\n\n${interpretationText}`.trim(),
+      };
+    };
 
     const emitToUI = (text: string) => {
       if (!text) {
@@ -185,6 +225,7 @@ class ApiService {
         return;
       }
       hasVisibleOutput = true;
+      visibleOutput += visibleText;
       onChunk(visibleText);
     };
 
@@ -309,10 +350,13 @@ class ApiService {
         break;
       }
       const chunk = decoder.decode(value, { stream: true });
+      rawResponseBuffer += chunk;
       processIncoming(chunk);
     }
 
-    processIncoming(decoder.decode());
+    const finalDecoded = decoder.decode();
+    rawResponseBuffer += finalDecoded;
+    processIncoming(finalDecoded);
 
     if (!readingUsagePayload && streamBuffer) {
       processReadableContent(streamBuffer);
@@ -341,7 +385,13 @@ class ApiService {
       }
     }
 
-    return { tokenUsage };
+    const structured = extractStructuredContent(rawResponseBuffer, visibleOutput);
+    return {
+      tokenUsage,
+      content: structured.content,
+      finalAnswer: structured.finalAnswer,
+      interpretation: structured.interpretation,
+    };
   }
 
   async completeAd(data: AdsCompleteRequest): Promise<AdsCompleteResponse> {
@@ -381,3 +431,4 @@ class ApiService {
 }
 
 export const api = new ApiService();
+

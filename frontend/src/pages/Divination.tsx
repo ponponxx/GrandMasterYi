@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import HexagramDisplay from '../components/HexagramDisplay';
 import { useI18n } from '../i18n';
@@ -23,6 +23,10 @@ interface LocalResult {
 const MAX_QUESTION_LENGTH = 1000;
 const APP_NAME = 'MasterYi';
 const GEN_PIC = false;
+const STREAM_TYPEWRITER_MS = 14;
+const FINAL_TYPEWRITER_MS = 20;
+const FINAL_PUSH_ANIMATION_MS = 420;
+const ANALYZING_TICKER_TEXT = '宗師分析中';
 type AdImageModel = 'imagen4_fast' | 'gemini31_flash_image_preview';
 
 const fillTemplate = (template: string, vars: Record<string, string | number>) => {
@@ -50,6 +54,16 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
   const [adCardError, setAdCardError] = useState<string | null>(null);
   const [lastReadingText, setLastReadingText] = useState('');
   const [lastQuestion, setLastQuestion] = useState('');
+  const [streamInterpretationText, setStreamInterpretationText] = useState('');
+  const [finalAnswerText, setFinalAnswerText] = useState('');
+  const [isFinalAnswerAnimating, setIsFinalAnswerAnimating] = useState(false);
+  const [analyzingTickerFrame, setAnalyzingTickerFrame] = useState(0);
+  const interpretationQueueRef = useRef('');
+  const finalQueueRef = useRef('');
+  const hasStreamedInterpretationRef = useRef(false);
+  const interpretationTimerRef = useRef<number | null>(null);
+  const finalTimerRef = useRef<number | null>(null);
+  const finalAnimationTimerRef = useRef<number | null>(null);
 
   const createEmptyAiReading = (): DivinationJsonResponse => ({
     reading_id: null,
@@ -59,7 +73,110 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
     saved_to_history: false,
   });
 
+  const stopTypingTimers = () => {
+    if (interpretationTimerRef.current !== null) {
+      window.clearInterval(interpretationTimerRef.current);
+      interpretationTimerRef.current = null;
+    }
+    if (finalTimerRef.current !== null) {
+      window.clearInterval(finalTimerRef.current);
+      finalTimerRef.current = null;
+    }
+    if (finalAnimationTimerRef.current !== null) {
+      window.clearTimeout(finalAnimationTimerRef.current);
+      finalAnimationTimerRef.current = null;
+    }
+  };
+
+  const startInterpretationTypewriter = () => {
+    if (interpretationTimerRef.current !== null) {
+      return;
+    }
+    interpretationTimerRef.current = window.setInterval(() => {
+      const queue = interpretationQueueRef.current;
+      if (!queue) {
+        if (interpretationTimerRef.current !== null) {
+          window.clearInterval(interpretationTimerRef.current);
+          interpretationTimerRef.current = null;
+        }
+        return;
+      }
+      const nextChar = queue[0];
+      interpretationQueueRef.current = queue.slice(1);
+      setStreamInterpretationText((prev) => `${prev}${nextChar}`);
+    }, STREAM_TYPEWRITER_MS);
+  };
+
+  const startFinalTypewriter = () => {
+    if (finalTimerRef.current !== null) {
+      return;
+    }
+    finalTimerRef.current = window.setInterval(() => {
+      const queue = finalQueueRef.current;
+      if (!queue) {
+        if (finalTimerRef.current !== null) {
+          window.clearInterval(finalTimerRef.current);
+          finalTimerRef.current = null;
+        }
+        return;
+      }
+      const nextChar = queue[0];
+      finalQueueRef.current = queue.slice(1);
+      setFinalAnswerText((prev) => `${prev}${nextChar}`);
+    }, FINAL_TYPEWRITER_MS);
+  };
+
+  const enqueueInterpretationText = (text: string) => {
+    if (!text) {
+      return;
+    }
+    if (text.trim()) {
+      hasStreamedInterpretationRef.current = true;
+    }
+    interpretationQueueRef.current += text;
+    startInterpretationTypewriter();
+  };
+
+  const startFinalAnswerReveal = (text: string) => {
+    if (!text) {
+      return;
+    }
+    setFinalAnswerText('');
+    finalQueueRef.current = text;
+    setIsFinalAnswerAnimating(true);
+    if (finalAnimationTimerRef.current !== null) {
+      window.clearTimeout(finalAnimationTimerRef.current);
+    }
+    finalAnimationTimerRef.current = window.setTimeout(() => {
+      setIsFinalAnswerAnimating(false);
+    }, FINAL_PUSH_ANIMATION_MS);
+    startFinalTypewriter();
+  };
+
+  const resetTypingState = () => {
+    stopTypingTimers();
+    interpretationQueueRef.current = '';
+    finalQueueRef.current = '';
+    hasStreamedInterpretationRef.current = false;
+    setStreamInterpretationText('');
+    setFinalAnswerText('');
+    setIsFinalAnswerAnimating(false);
+  };
+
+  useEffect(() => () => stopTypingTimers(), []);
+
+  useEffect(() => {
+    if (!aiReading || finalAnswerText) {
+      return;
+    }
+    const tickerId = window.setInterval(() => {
+      setAnalyzingTickerFrame((prev) => (prev + 1) % 3);
+    }, 260);
+    return () => window.clearInterval(tickerId);
+  }, [aiReading, finalAnswerText]);
+
   const resetReading = () => {
+    resetTypingState();
     setLocalResult(null);
     setAiReading(null);
     setCurrentThrows([]);
@@ -172,6 +289,7 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
   };
 
   const startCasting = async () => {
+    resetTypingState();
     setIsThrowing(true);
     setAiReading(null);
     setLocalResult(null);
@@ -239,25 +357,18 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
     setLoading(true);
     setAdCardDataUrl(null);
     setAdCardError(null);
+    resetTypingState();
     const initialReading = createEmptyAiReading();
     setAiReading(initialReading);
 
     try {
-      let streamedContent = '';
       const streamResult = await api.performDivinationStream(
         {
           question: trimmedQuestion,
           throws: currentThrows,
         },
         (chunk) => {
-          streamedContent += chunk;
-          setAiReading((prev) => {
-            const current = prev ?? initialReading;
-            return {
-              ...current,
-              content: `${current.content}${chunk}`,
-            };
-          });
+          enqueueInterpretationText(chunk);
         },
         adToken
       );
@@ -269,18 +380,39 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
         console.warn('[Divination][TokenUsage] missing from stream response');
       }
 
-      setAiReading((prev) => (prev ? { ...prev, saved_to_history: true } : prev));
-      const finalText = streamedContent.trim();
-      if (finalText) {
-        setLastReadingText(finalText);
+      const interpretationText = (streamResult.interpretation || '').trim();
+      if (interpretationText && !hasStreamedInterpretationRef.current) {
+        enqueueInterpretationText(interpretationText);
+      }
+
+      const finalAnswer = (streamResult.finalAnswer || '').trim();
+      if (finalAnswer) {
+        startFinalAnswerReveal(finalAnswer);
+      }
+
+      const mergedText = (streamResult.content || '').trim();
+      if (mergedText) {
+        setAiReading({
+          ...initialReading,
+          content: mergedText,
+          saved_to_history: true,
+        });
+        setLastReadingText(mergedText);
         setLastQuestion(trimmedQuestion);
         if (GEN_PIC) {
-          await buildAdCard(adCardModel, trimmedQuestion, finalText);
+          await buildAdCard(adCardModel, trimmedQuestion, mergedText);
         }
+      } else {
+        setAiReading({
+          ...initialReading,
+          content: '',
+          saved_to_history: true,
+        });
       }
       const updatedProfile = await api.getMe();
       onUserUpdate(updatedProfile);
     } catch (error: any) {
+      resetTypingState();
       setAiReading(null);
       if (error.message === 'INSUFFICIENT_FUNDS') {
         setShowAdDialog(true);
@@ -344,6 +476,8 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
     currentThrows.length < 6
       ? t.status.castingLine.replace('{line}', String(currentThrows.length + 1))
       : t.status.castingDone;
+  const showAiResultPanel = !!aiReading;
+  const showAnalyzingTicker = showAiResultPanel && !finalAnswerText;
 
   return (
     <div className="flex flex-col items-center w-full max-w-xl mx-auto space-y-10 pb-32">
@@ -460,21 +594,27 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
             )}
           </div>
 
-          {!aiReading ? (
+          {!showAiResultPanel ? (
             <div className="text-center py-4">
-              <button
-                onClick={handleInterpretationClick}
-                className="px-12 py-5 bg-red-700 text-white rounded-sm font-bold tracking-[0.3em] hover:bg-red-800 transition shadow-lg flex items-center gap-4 mx-auto"
-              >
-                <span>{t.buttons.askAi}</span>
-                <span className="text-xs opacity-60 font-sans tracking-normal">{t.aiResult.costHint}</span>
-              </button>
-              <button
-                onClick={resetReading}
-                className="mt-6 text-neutral-400 hover:text-neutral-900 text-sm tracking-widest block mx-auto"
-              >
-                {t.buttons.reset}
-              </button>
+              {loading ? (
+                <p className="text-neutral-400 text-sm tracking-widest">{t.status.loading}</p>
+              ) : (
+                <>
+                  <button
+                    onClick={handleInterpretationClick}
+                    className="px-12 py-5 bg-red-700 text-white rounded-sm font-bold tracking-[0.3em] hover:bg-red-800 transition shadow-lg flex items-center gap-4 mx-auto"
+                  >
+                    <span>{t.buttons.askAi}</span>
+                    <span className="text-xs opacity-60 font-sans tracking-normal">{t.aiResult.costHint}</span>
+                  </button>
+                  <button
+                    onClick={resetReading}
+                    className="mt-6 text-neutral-400 hover:text-neutral-900 text-sm tracking-widest block mx-auto"
+                  >
+                    {t.buttons.reset}
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <div className="bg-neutral-900 text-white p-10 rounded-sm shadow-2xl space-y-6 relative overflow-hidden">
@@ -484,8 +624,46 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
               <h3 className="text-xl font-bold tracking-[0.4em] text-neutral-400 uppercase border-b border-neutral-800 pb-4">
                 {t.aiResult.title}
               </h3>
-              <div className="prose prose-invert max-w-none text-neutral-200 font-serif-tc text-xl leading-[2.2] whitespace-pre-wrap">
-                {aiReading.content}
+              <div className="space-y-5">
+                {showAnalyzingTicker && (
+                  <div className="sticky top-0 z-10 space-y-2 pb-2">
+                    {Array.from({ length: 3 }).map((_, idx) => {
+                      const dots = '.'.repeat(((analyzingTickerFrame + idx) % 3) + 1);
+                      return (
+                        <div
+                          key={idx}
+                          className="h-9 px-3 border border-amber-300/60 bg-amber-50/10 text-amber-100 text-sm tracking-[0.2em] flex items-center animate-pulse rounded-sm"
+                        >
+                          {ANALYZING_TICKER_TEXT}
+                          {dots}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {finalAnswerText && (
+                  <div
+                    className={`border border-amber-300/60 bg-amber-50/10 text-amber-100 p-5 rounded-sm transition-all duration-500 ${
+                      isFinalAnswerAnimating ? '-translate-y-1 scale-[1.01]' : ''
+                    }`}
+                  >
+                    <p className="text-[11px] tracking-[0.28em] uppercase text-amber-200 mb-3">Final Answer</p>
+                    <p className="whitespace-pre-wrap text-lg leading-[1.9]">{finalAnswerText}</p>
+                  </div>
+                )}
+
+                <div
+                  className={`prose prose-invert max-w-none text-neutral-200 font-serif-tc text-xl leading-[2.2] whitespace-pre-wrap transition-all duration-500 ${
+                    isFinalAnswerAnimating ? 'translate-y-3' : ''
+                  }`}
+                >
+                  {streamInterpretationText || aiReading.content}
+                </div>
+
+                {loading && (
+                  <p className="text-sm tracking-widest text-neutral-500">{t.status.loading}</p>
+                )}
               </div>
               <div className="pt-6 border-t border-neutral-800 space-y-4">
                 <div className="flex flex-wrap gap-3">

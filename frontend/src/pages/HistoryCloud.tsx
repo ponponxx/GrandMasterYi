@@ -23,7 +23,11 @@ const fillTemplate = (template: string, vars: Record<string, string | number>) =
   return out;
 };
 
-const HistoryCloud: React.FC = () => {
+interface HistoryCloudProps {
+  reloadToken?: number;
+}
+
+const HistoryCloud: React.FC<HistoryCloudProps> = ({ reloadToken = 0 }) => {
   const { messages } = useI18n();
   const t = messages.ui.historyCloud;
   const [history, setHistory] = useState<HistoryListItem[]>([]);
@@ -38,6 +42,7 @@ const HistoryCloud: React.FC = () => {
 
   useEffect(() => {
     const fetchHistory = async () => {
+      setLoading(true);
       try {
         const res = await api.getHistory();
         setHistory(res.items);
@@ -48,7 +53,7 @@ const HistoryCloud: React.FC = () => {
       }
     };
     fetchHistory();
-  }, []);
+  }, [reloadToken]);
 
   const togglePin = async (id: number, currentPinned: boolean) => {
     const nextPinned = !currentPinned;

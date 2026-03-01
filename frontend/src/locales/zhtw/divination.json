@@ -23,13 +23,13 @@
     "loading": "正在解卦..."
   },
   "buttons": {
-    "startCasting": "開始起卦",
-    "askAi": "請 AI 解卦",
+    "startCasting": "揲蓍起卦",
+    "askAi": "宗師解讀",
     "reset": "重置",
     "newReading": "重新占問"
   },
   "localResult": {
-    "seal": "本卦結果",
+    "seal": "初占結果",
     "titleTemplate": "第 {id} 卦：{name}",
     "summaryJoiner": "，",
     "throwsLabel": "六爻（由初至上）：",

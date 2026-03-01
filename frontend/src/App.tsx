@@ -24,6 +24,7 @@ const App: React.FC = () => {
   const t = messages.ui.app;
   const [user, setUser] = useState<UserProfile | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('main');
+  const [historyReloadKey, setHistoryReloadKey] = useState(0);
   const [initializing, setInitializing] = useState(true);
   const tabMeta: Record<Tab, { label: string; icon: string }> = {
     main: t.tabs.main,
@@ -69,6 +70,12 @@ const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'history') {
+      setHistoryReloadKey((prev) => prev + 1);
+    }
   }, [activeTab]);
 
   if (initializing) {
@@ -132,7 +139,7 @@ const App: React.FC = () => {
           <Shop user={user} />
         </section>
         <section className={activeTab === 'history' ? 'block' : 'hidden'}>
-          <History />
+          <History reloadToken={historyReloadKey} />
         </section>
         <section className={activeTab === 'achievements' ? 'block' : 'hidden'}>
           <Achievements user={user} />

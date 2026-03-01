@@ -11,7 +11,11 @@ const fillTemplate = (template: string, vars: Record<string, string | number>) =
   return out;
 };
 
-const HistoryOffline: React.FC = () => {
+interface HistoryOfflineProps {
+  reloadToken?: number;
+}
+
+const HistoryOffline: React.FC<HistoryOfflineProps> = ({ reloadToken = 0 }) => {
   const { messages } = useI18n();
   const t = messages.ui.historyOffline;
   const [items, setItems] = useState<OfflineReadingRecord[]>([]);
@@ -20,6 +24,7 @@ const HistoryOffline: React.FC = () => {
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true);
       try {
         const readings = await listOfflineReadings();
         setItems(readings);
@@ -30,7 +35,7 @@ const HistoryOffline: React.FC = () => {
       }
     };
     load();
-  }, []);
+  }, [reloadToken]);
 
   const handleDelete = async (id?: number) => {
     if (typeof id !== 'number') {
