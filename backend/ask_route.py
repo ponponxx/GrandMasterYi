@@ -45,6 +45,7 @@ PROMPT_FINAL_INSTRUCTIONS_PATH = os.path.join(
 )
 MAX_QUESTION_LENGTH = 1000
 MAX_READING_TEXT_LENGTH = 8000
+GEN_PIC = False
 TRIGRAM_MAP_TOP_DOWN = {
     "111": ("乾", "天"),
     "110": ("巽", "風"),
@@ -621,6 +622,9 @@ def ask_context():
 
 @ask_bp.route("/ad-card", methods=["POST"])
 def ask_ad_card():
+    if not GEN_PIC:
+        return jsonify({"error": "feature_disabled", "details": "gen_pic_disabled"}), 503
+
     user_id = _get_user_id_from_bearer()
     if not user_id:
         return jsonify({"error": "invalid_or_expired_token"}), 401

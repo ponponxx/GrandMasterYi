@@ -22,6 +22,7 @@ interface LocalResult {
 
 const MAX_QUESTION_LENGTH = 1000;
 const APP_NAME = 'MasterYi';
+const GEN_PIC = false;
 type AdImageModel = 'imagen4_fast' | 'gemini31_flash_image_preview';
 
 const fillTemplate = (template: string, vars: Record<string, string | number>) => {
@@ -72,6 +73,11 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
   };
 
   const buildAdCard = async (model: AdImageModel, questionText: string, readingText: string) => {
+    if (!GEN_PIC) {
+      setAdCardError('GEN_PIC_DISABLED');
+      setAdCardDataUrl(null);
+      return;
+    }
     if (!questionText || !readingText || currentThrows.length !== 6) {
       return;
     }
@@ -268,7 +274,9 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
       if (finalText) {
         setLastReadingText(finalText);
         setLastQuestion(trimmedQuestion);
-        await buildAdCard(adCardModel, trimmedQuestion, finalText);
+        if (GEN_PIC) {
+          await buildAdCard(adCardModel, trimmedQuestion, finalText);
+        }
       }
       const updatedProfile = await api.getMe();
       onUserUpdate(updatedProfile);
@@ -300,6 +308,10 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
   };
 
   const handleRegenerateAdCard = async (model: AdImageModel) => {
+    if (!GEN_PIC) {
+      setAdCardError('GEN_PIC_DISABLED');
+      return;
+    }
     const questionText = (lastQuestion || question || '').trim();
     const readingText = (lastReadingText || aiReading?.content || '').trim();
     if (!questionText || !readingText) {
@@ -479,7 +491,7 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => handleRegenerateAdCard('imagen4_fast')}
-                    disabled={adCardLoading}
+                    disabled={adCardLoading || !GEN_PIC}
                     className={`px-4 py-2 border text-sm ${
                       adCardModel === 'imagen4_fast' ? 'border-white text-white' : 'border-neutral-600 text-neutral-300'
                     }`}
@@ -488,7 +500,7 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
                   </button>
                   <button
                     onClick={() => handleRegenerateAdCard('gemini31_flash_image_preview')}
-                    disabled={adCardLoading}
+                    disabled={adCardLoading || !GEN_PIC}
                     className={`px-4 py-2 border text-sm ${
                       adCardModel === 'gemini31_flash_image_preview'
                         ? 'border-white text-white'
