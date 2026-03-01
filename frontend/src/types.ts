@@ -62,6 +62,22 @@ export interface DivinationJsonResponse {
   token_usage?: TokenUsage | null;
 }
 
+export interface AdCardRequest {
+  question: string;
+  throws: (6 | 7 | 8 | 9)[];
+  reading_text: string;
+  image_model?: "imagen4_fast" | "gemini31_flash_image_preview";
+}
+
+export interface AdCardResponse {
+  image_model: "imagen4_fast" | "gemini31_flash_image_preview";
+  hexagram_code: string;
+  hexagram_name: string;
+  prompt_used?: string;
+  model?: string;
+  image_data_url: string;
+}
+
 export interface HistoryListItem {
   reading_id: number;
   question: string;

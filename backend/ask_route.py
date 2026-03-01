@@ -9,6 +9,7 @@ from flask import Blueprint, Response, jsonify, request
 from auth_route import decode_session_token
 from billing_repo import can_consume_ask, refund_consumed_ask
 from history_repo import record_reading
+from services.imagen_service import ImagenServiceError, generate_ad_image
 from services.llm_service import LLMServiceError, generate_divination
 from users_repo import get_user_by_id, increment_user_ask_count
 
@@ -21,27 +22,29 @@ SYSTEM_PROMPT = (
     "Do not fabricate missing classics text or historical stories. "
     "Do not guarantee outcomes."
 )
-PROMPT_FINAL_INSTRUCTIONS = (
+DEFAULT_PROMPT_FINAL_INSTRUCTIONS = (
     "<Instructions>\n"
-    "請嚴格按照以下 XML 格式輸出你的推演與回答：\n\n"
-    "<Thinking>\n"
-    "(請用繁體中文進行思考：\n"
-    "1. 分析問題：問卦者求問的是哪個範疇（人/事/時/地/物），若同時含多個範疇需分別處理。\n"
-    "2. 提取線索：從 <Hints> 中找出對應範疇的關鍵字。\n"
-    "3. 卦象推演：結合卦名、卦辭與動爻爻辭意象，推斷目前處境與後續走向。\n"
-    "4. 擬定建議：給出具體可執行的行動方案，並指出明確時間點。)\n"
-    "</Thinking>\n\n"
+    "請嚴格按照以下 XML 格式順序輸出，不得跳過任何步驟，這對於你的邏輯正確性至關重要：\n\n"
+    "1. <Internal_Logic>\n"
+    "(此處進行分析問題與提取線索。分析問卦範疇、識別 Hints 關鍵字。此部分為內部對齊，請用精煉的繁體中文條列。)\n"
+    "</Internal_Logic>\n\n"
+    "2. <Interpretation_Flow>\n"
+    "(此處進行卦象推演與擬定建議。結合卦名、卦辭、動爻爻辭，針對現實處境進行深度解碼，並給出具體行動點與時間指標。)\n"
+    "</Interpretation_Flow>\n\n"
     "<Final_Answer>\n"
-    "(請以易經宗師的口吻，直接給出一段通順、有深度、帶有古風且實用的解卦文。"
-    "必須包含對時間與困難的具體看法。請勿使用「1. 2. 3.」這類生硬條列式。)\n"
+    "(請以易經宗師的口吻，將上述推演轉化為一段通順、有深度、帶有古風且實用的解卦結論。請一氣呵成，勿使用條列式。)\n"
     "</Final_Answer>\n"
     "</Instructions>"
 )
 
 ICHING_DB_PATH = os.path.join(os.path.dirname(__file__), "iching.db")
 DEBUG_PROMPT_DIR = os.path.join(os.path.dirname(__file__), "debug_prompts")
+PROMPT_FINAL_INSTRUCTIONS_PATH = os.path.join(
+    os.path.dirname(__file__), "PROMPT_FINAL_INSTRUCTIONS.json"
+)
 TOKEN_USAGE_MARKER = "\n[[[TOKEN_USAGE]]]"
 MAX_QUESTION_LENGTH = 1000
+MAX_READING_TEXT_LENGTH = 8000
 TRIGRAM_MAP_TOP_DOWN = {
     "111": ("乾", "天"),
     "110": ("巽", "風"),
@@ -52,6 +55,82 @@ TRIGRAM_MAP_TOP_DOWN = {
     "001": ("震", "雷"),
     "000": ("坤", "地"),
 }
+TRIGRAM_VISUAL_HINTS = {
+    "乾": "celestial sky, vast firmament, airy horizon",
+    "坤": "fertile earth, wide plains, grounded terrain",
+    "坎": "deep abyss, flowing river, layered mist",
+    "艮": "solid mountain peak, still stone, steep cliffs",
+    "震": "thunder over forests, dynamic horizon, charged air",
+    "巽": "flowing wind, swaying bamboo, drifting currents",
+    "離": "glowing firelight, radiant sun, warm luminous aura",
+    "兌": "reflective lake, gentle marsh, open water surface",
+}
+
+STYLE_PRESETS = {
+    "zen": {
+        "style": (
+            "Traditional Chinese ink wash painting (Shuimo), expressive brush strokes, "
+            "rice paper texture, high contrast charcoal tones, negative space, wabi-sabi, ethereal mood."
+        ),
+        "typography": (
+            "Ancient Chinese Bronze Inscription style (Jinwen), mystical archaic character, "
+            "vertical calligraphy on the right side."
+        ),
+        "composition": "minimalist landscape composition, cinematic lighting, spiritual and contemplative atmosphere",
+    },
+}
+SUPPORTED_AD_IMAGE_MODELS = {"imagen4_fast", "gemini31_flash_image_preview"}
+
+PROMPT_FINAL_INSTRUCTIONS_CACHE = {
+    "mtime": None,
+    "value": DEFAULT_PROMPT_FINAL_INSTRUCTIONS,
+}
+
+
+def _parse_prompt_final_instructions_payload(payload):
+    if isinstance(payload, str):
+        loaded = payload
+    elif isinstance(payload, dict):
+        loaded = payload.get("PROMPT_FINAL_INSTRUCTIONS")
+        if not loaded:
+            loaded = payload.get("prompt_final_instructions")
+    else:
+        loaded = None
+    if not isinstance(loaded, str) or not loaded.strip():
+        raise ValueError("missing_prompt_final_instructions")
+    return loaded.strip()
+
+
+def _load_prompt_final_instructions():
+    with open(PROMPT_FINAL_INSTRUCTIONS_PATH, "r", encoding="utf-8") as file:
+        payload = json.load(file)
+    return _parse_prompt_final_instructions_payload(payload)
+
+
+def _get_prompt_final_instructions():
+    cache = PROMPT_FINAL_INSTRUCTIONS_CACHE
+    cached_value = cache.get("value")
+    try:
+        current_mtime = os.path.getmtime(PROMPT_FINAL_INSTRUCTIONS_PATH)
+    except Exception:
+        traceback.print_exc()
+        if isinstance(cached_value, str) and cached_value.strip():
+            return cached_value
+        return DEFAULT_PROMPT_FINAL_INSTRUCTIONS
+
+    if cache.get("mtime") == current_mtime and isinstance(cached_value, str) and cached_value.strip():
+        return cached_value
+
+    try:
+        loaded = _load_prompt_final_instructions()
+        cache["mtime"] = current_mtime
+        cache["value"] = loaded
+        return loaded
+    except Exception:
+        traceback.print_exc()
+        if isinstance(cached_value, str) and cached_value.strip():
+            return cached_value
+        return DEFAULT_PROMPT_FINAL_INSTRUCTIONS
 
 try:
     os.makedirs(DEBUG_PROMPT_DIR, exist_ok=True)
@@ -119,6 +198,52 @@ def _parse_request_payload(data):
         "throws": normalized_throws,
         "user_name": user_name,
         "client_context": client_context,
+    }
+
+
+def _parse_ad_card_payload(data):
+    if not isinstance(data, dict):
+        return None
+
+    question = data.get("question")
+    throws = data.get("throws")
+    reading_text = data.get("reading_text")
+    image_model = data.get("image_model")
+
+    if not isinstance(question, str):
+        return None
+    question = question.strip()
+    if not question or len(question) > MAX_QUESTION_LENGTH:
+        return None
+
+    if not isinstance(reading_text, str):
+        return None
+    reading_text = reading_text.strip()
+    if not reading_text or len(reading_text) > MAX_READING_TEXT_LENGTH:
+        return None
+
+    if image_model is None:
+        image_model = "imagen4_fast"
+    if not isinstance(image_model, str):
+        return None
+    image_model = image_model.strip().lower()
+    if image_model not in SUPPORTED_AD_IMAGE_MODELS:
+        return None
+
+    if not isinstance(throws, list) or len(throws) != 6:
+        return None
+
+    normalized_throws = []
+    for value in throws:
+        if isinstance(value, bool) or not isinstance(value, int) or value not in {6, 7, 8, 9}:
+            return None
+        normalized_throws.append(value)
+
+    return {
+        "question": question,
+        "throws": normalized_throws,
+        "reading_text": reading_text,
+        "image_model": image_model,
     }
 
 
@@ -288,8 +413,39 @@ def _build_user_prompt(question, context, user_name, client_context):
         [
             "\n".join(context_parts),
             hints_block,
-            PROMPT_FINAL_INSTRUCTIONS,
+            _get_prompt_final_instructions(),
         ]
+    )
+
+
+def _build_imagen_prompt(question, reading_text, context):
+    style_preset = STYLE_PRESETS["zen"]
+    upper = context.get("upper_trigram", {})
+    lower = context.get("lower_trigram", {})
+    upper_name = upper.get("name") or "未知"
+    lower_name = lower.get("name") or "未知"
+    upper_hint = TRIGRAM_VISUAL_HINTS.get(upper_name, "symbolic sky element")
+    lower_hint = TRIGRAM_VISUAL_HINTS.get(lower_name, "symbolic earth element")
+    hexagram_name = (context.get("hexagram_name") or "").strip() or "I Ching hexagram"
+    judgment = (context.get("judgment") or "").strip()
+    reading_excerpt = " ".join((reading_text or "").split())[:520]
+    question_excerpt = " ".join((question or "").split())[:280]
+
+    return (
+        "Minimalist symbolic I Ching ad card background illustration. "
+        f"Core scene: depict the hexagram atmosphere of {hexagram_name}. "
+        f"Upper trigram visual element: {upper_name} -> {upper_hint}. "
+        f"Lower trigram visual element: {lower_name} -> {lower_hint}. "
+        "Include subtle symbolic tension that implies transformation and insight. "
+        f"Art style: {style_preset['style']} "
+        f"Typography hint: {style_preset['typography']} "
+        f"Composition and mood: {style_preset['composition']}. "
+        "Leave clean negative space for ad copy placement and a QR block in bottom-right corner. "
+        "No logos, no watermark, no readable English paragraphs, no UI widgets. "
+        f"Question context: {question_excerpt}. "
+        f"Divination summary context: {reading_excerpt}. "
+        f"Hexagram judgment context: {judgment}. "
+        "High detail, premium mobile campaign visual, 1024x1792."
     )
 
 
@@ -420,6 +576,63 @@ def ask_context():
     except Exception as exc:
         traceback.print_exc()
         return jsonify({"error": "server_error", "details": f"iching_lookup_failed:{exc}"}), 500
+
+
+@ask_bp.route("/ad-card", methods=["POST"])
+def ask_ad_card():
+    user_id = _get_user_id_from_bearer()
+    if not user_id:
+        return jsonify({"error": "invalid_or_expired_token"}), 401
+
+    user = get_user_by_id(user_id)
+    if not user:
+        return jsonify({"error": "invalid_or_expired_token"}), 401
+
+    payload = _parse_ad_card_payload(request.get_json(silent=True) or {})
+    if not payload:
+        return jsonify({"error": "missing_or_invalid_fields"}), 400
+
+    try:
+        context = _load_iching_context(payload["throws"])
+    except Exception as exc:
+        traceback.print_exc()
+        return jsonify({"error": "server_error", "details": f"iching_lookup_failed:{exc}"}), 500
+
+    image_prompt = _build_imagen_prompt(
+        question=payload["question"],
+        reading_text=payload["reading_text"],
+        context=context,
+    )
+
+    try:
+        image_result = generate_ad_image(
+            image_prompt,
+            aspect_ratio="9:16",
+            model_selector=payload["image_model"],
+        )
+    except ImagenServiceError as exc:
+        traceback.print_exc()
+        status_code = exc.status_code if exc.status_code in {400, 401, 403, 404, 429, 500, 502, 503, 504} else 503
+        return jsonify({"error": "server_error", "details": str(exc)}), status_code
+    except Exception as exc:
+        traceback.print_exc()
+        return jsonify({"error": "server_error", "details": str(exc)}), 500
+
+    mime_type = image_result.get("mime_type") or "image/png"
+    image_b64 = image_result.get("image_b64") or ""
+    if not image_b64:
+        return jsonify({"error": "server_error", "details": "empty_image_output"}), 502
+
+    return jsonify(
+        {
+            "image_model": payload["image_model"],
+            "hexagram_code": context["hexagram_code"],
+            "hexagram_name": context["hexagram_name"],
+            "prompt_used": image_prompt,
+            "model": image_result.get("model"),
+            "image_data_url": f"data:{mime_type};base64,{image_b64}",
+        }
+    )
 
 
 @ask_bp.route("", methods=["POST"])

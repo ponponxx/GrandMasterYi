@@ -1,0 +1,3 @@
+{
+  "PROMPT_FINAL_INSTRUCTIONS": "<Instructions>\n請嚴格按照以下 XML 格式順序輸出，不得跳過任何步驟，這對於你的邏輯正確性至關重要：\n\n1. <Internal_Logic>\n(此處進行分析問題與提取線索。分析問卦範疇、識別 Hints 關鍵字。此部分為內部對齊，請用精煉的繁體中文條列。)\n</Internal_Logic>\n\n2. <Interpretation_Flow>\n(此處進行卦象推演與擬定建議。結合卦名、卦辭、動爻爻辭，針對現實處境進行深度解碼，並給出具體行動點與時間指標。)\n</Interpretation_Flow>\n\n<Final_Answer>\n(請以易經宗師的口吻，將上述推演轉化為一段通順、有深度、帶有古風且實用的解卦結論。請一氣呵成，勿使用條列式。)\n</Final_Answer>\n</Instructions>"
+}

@@ -5,6 +5,8 @@ import {
   UserProfile, 
   DivinationRequest, 
   DivinationJsonResponse,
+  AdCardRequest,
+  AdCardResponse,
   HistoryListResponse,
   HistoryDetailResponse,
   TokenUsage
@@ -111,12 +113,23 @@ class ApiService {
     });
   }
 
+  async generateAdCard(data: AdCardRequest): Promise<AdCardResponse> {
+    return this.request<AdCardResponse>('/divination/ad-card', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+  }
+
   async performDivinationStream(
     data: DivinationRequest,
     onChunk: (chunk: string) => void,
     adSessionToken?: string
   ): Promise<DivinationStreamResult> {
     const tokenUsageMarker = '[[[TOKEN_USAGE]]]';
+    const interpretationStartRegex = /<\s*Interpretation(?:\s|_)*Flow\s*>/i;
     const headers = new Headers({
       'Accept': 'text/plain',
       'Content-Type': 'application/json',
@@ -152,6 +165,109 @@ class ApiService {
     let streamBuffer = '';
     let usageBuffer = '';
     let readingUsagePayload = false;
+    let interpretationSearchBuffer = '';
+    let interpretationStarted = false;
+    let insideXmlTag = false;
+    let sentenceBuffer = '';
+    let hasVisibleOutput = false;
+
+    const isSentenceBoundary = (char: string) => '。！？!?；;.\n\r'.includes(char);
+
+    const emitToUI = (text: string) => {
+      if (!text) {
+        return;
+      }
+      let visibleText = text;
+      if (!hasVisibleOutput) {
+        visibleText = visibleText.replace(/^\s+/, '');
+      }
+      if (!visibleText.trim()) {
+        return;
+      }
+      hasVisibleOutput = true;
+      onChunk(visibleText);
+    };
+
+    const stripXmlTagsIncremental = (text: string) => {
+      let out = '';
+      for (const char of text) {
+        if (insideXmlTag) {
+          if (char === '>') {
+            insideXmlTag = false;
+          }
+          continue;
+        }
+        if (char === '<') {
+          insideXmlTag = true;
+          continue;
+        }
+        out += char;
+      }
+      return out;
+    };
+
+    const flushCompletedSentences = (force = false) => {
+      if (!sentenceBuffer) {
+        return;
+      }
+      if (force) {
+        emitToUI(sentenceBuffer);
+        sentenceBuffer = '';
+        return;
+      }
+
+      let lastBoundaryIndex = -1;
+      for (let i = 0; i < sentenceBuffer.length; i += 1) {
+        if (isSentenceBoundary(sentenceBuffer[i])) {
+          lastBoundaryIndex = i;
+        }
+      }
+      if (lastBoundaryIndex < 0) {
+        return;
+      }
+
+      const completed = sentenceBuffer.slice(0, lastBoundaryIndex + 1);
+      sentenceBuffer = sentenceBuffer.slice(lastBoundaryIndex + 1);
+      emitToUI(completed);
+    };
+
+    const processReadableContent = (incoming: string, flush = false) => {
+      if (incoming) {
+        interpretationSearchBuffer += incoming;
+      }
+
+      if (!interpretationStarted) {
+        const markerMatch = interpretationSearchBuffer.match(interpretationStartRegex);
+        if (!markerMatch || typeof markerMatch.index !== 'number') {
+          if (!flush) {
+            const tailReserve = 200;
+            if (interpretationSearchBuffer.length > tailReserve) {
+              interpretationSearchBuffer = interpretationSearchBuffer.slice(-tailReserve);
+            }
+          } else {
+            interpretationSearchBuffer = '';
+          }
+          return;
+        }
+        interpretationStarted = true;
+        interpretationSearchBuffer = interpretationSearchBuffer.slice(
+          markerMatch.index + markerMatch[0].length
+        );
+      }
+
+      if (interpretationSearchBuffer) {
+        const visible = stripXmlTagsIncremental(interpretationSearchBuffer);
+        interpretationSearchBuffer = '';
+        if (visible) {
+          sentenceBuffer += visible;
+          flushCompletedSentences(false);
+        }
+      }
+
+      if (flush) {
+        flushCompletedSentences(true);
+      }
+    };
 
     const processIncoming = (incoming: string) => {
       if (!incoming) {
@@ -171,7 +287,7 @@ class ApiService {
           readable = readable.slice(0, -1);
         }
         if (readable) {
-          onChunk(readable);
+          processReadableContent(readable);
         }
         usageBuffer += streamBuffer.slice(markerIndex + tokenUsageMarker.length);
         streamBuffer = '';
@@ -182,7 +298,7 @@ class ApiService {
       const tailReserve = tokenUsageMarker.length - 1;
       if (streamBuffer.length > tailReserve) {
         const emitLength = streamBuffer.length - tailReserve;
-        onChunk(streamBuffer.slice(0, emitLength));
+        processReadableContent(streamBuffer.slice(0, emitLength));
         streamBuffer = streamBuffer.slice(emitLength);
       }
     };
@@ -199,8 +315,10 @@ class ApiService {
     processIncoming(decoder.decode());
 
     if (!readingUsagePayload && streamBuffer) {
-      onChunk(streamBuffer);
+      processReadableContent(streamBuffer);
+      streamBuffer = '';
     }
+    processReadableContent('', true);
 
     let tokenUsage: TokenUsage | null = null;
     if (readingUsagePayload) {
