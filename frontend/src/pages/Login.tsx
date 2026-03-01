@@ -123,6 +123,14 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               className="w-8 h-8 rotate-infinite"
             />
           </div>
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-neutral-500 hover:text-neutral-900 underline underline-offset-4"
+          >
+            Privacy Policy
+          </a>
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ import Achievements from './pages/Achievements';
 import Divination from './pages/Divination';
 import History from './pages/History';
 import Login from './pages/Login';
+import Privacy from './pages/Privacy';
 import Shop from './pages/Shop';
 import { api } from './services/api';
 import { UserProfile } from './types';
@@ -12,6 +13,13 @@ import { UserProfile } from './types';
 type Tab = 'main' | 'shop' | 'history' | 'achievements';
 
 const App: React.FC = () => {
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+  const isPrivacyPage = pathname === '/privacy';
+
+  if (isPrivacyPage) {
+    return <Privacy />;
+  }
+
   const { messages } = useI18n();
   const t = messages.ui.app;
   const [user, setUser] = useState<UserProfile | null>(null);
