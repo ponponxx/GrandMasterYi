@@ -39,10 +39,10 @@ DEFAULT_PROMPT_FINAL_INSTRUCTIONS = (
 
 ICHING_DB_PATH = os.path.join(os.path.dirname(__file__), "iching.db")
 DEBUG_PROMPT_DIR = os.path.join(os.path.dirname(__file__), "debug_prompts")
+DEBUG_IMAGE_PROMPT_DIR = os.path.join(os.path.dirname(__file__), "debug_image_prompts")
 PROMPT_FINAL_INSTRUCTIONS_PATH = os.path.join(
     os.path.dirname(__file__), "PROMPT_FINAL_INSTRUCTIONS.json"
 )
-TOKEN_USAGE_MARKER = "\n[[[TOKEN_USAGE]]]"
 MAX_QUESTION_LENGTH = 1000
 MAX_READING_TEXT_LENGTH = 8000
 TRIGRAM_MAP_TOP_DOWN = {
@@ -132,10 +132,11 @@ def _get_prompt_final_instructions():
             return cached_value
         return DEFAULT_PROMPT_FINAL_INSTRUCTIONS
 
-try:
-    os.makedirs(DEBUG_PROMPT_DIR, exist_ok=True)
-except Exception:
-    traceback.print_exc()
+for debug_dir in (DEBUG_PROMPT_DIR, DEBUG_IMAGE_PROMPT_DIR):
+    try:
+        os.makedirs(debug_dir, exist_ok=True)
+    except Exception:
+        traceback.print_exc()
 
 
 def _get_user_id_from_bearer():
@@ -445,7 +446,7 @@ def _build_imagen_prompt(question, reading_text, context):
         f"Question context: {question_excerpt}. "
         f"Divination summary context: {reading_excerpt}. "
         f"Hexagram judgment context: {judgment}. "
-        "High detail, premium mobile campaign visual, 1024x1792."
+        "High detail, premium mobile campaign visual, vertical 9:16 composition."
     )
 
 
@@ -491,6 +492,46 @@ def _debug_log_prompt_markdown(user_id, question, hexagram_code, changing_lines,
             file.write("## User Prompt\n\n")
             file.write("```text\n")
             file.write(f"{user_prompt or ''}\n")
+            file.write("```\n")
+    except Exception:
+        traceback.print_exc()
+
+
+def _debug_log_image_prompt_markdown(
+    user_id,
+    question,
+    hexagram_code,
+    changing_lines,
+    image_model,
+    image_prompt,
+):
+    try:
+        os.makedirs(DEBUG_IMAGE_PROMPT_DIR, exist_ok=True)
+
+        timestamp = datetime.now(timezone.utc)
+        ts_for_file = timestamp.strftime("%Y%m%d_%H%M%S_%f")
+        ts_iso = timestamp.isoformat().replace("+00:00", "Z")
+        safe_user = _safe_filename_component(user_id, "anonymous")
+        safe_hex = _safe_filename_component(hexagram_code, "unknown_hex")
+        safe_model = _safe_filename_component(image_model, "unknown_model")
+        filename = f"{ts_for_file}_{safe_user}_{safe_hex}_{safe_model}.md"
+        path = os.path.join(DEBUG_IMAGE_PROMPT_DIR, filename)
+
+        question_text = (question or "").strip()
+        changing_lines_json = json.dumps(changing_lines or [], ensure_ascii=False)
+
+        with open(path, "w", encoding="utf-8") as file:
+            file.write("# Ad Card Image Prompt Debug Log\n\n")
+            file.write(f"- created_at_utc: `{ts_iso}`\n")
+            file.write(f"- user_id: `{user_id or ''}`\n")
+            file.write(f"- hexagram_code: `{hexagram_code or ''}`\n")
+            file.write(f"- changing_lines: `{changing_lines_json}`\n")
+            file.write(f"- image_model: `{image_model or ''}`\n")
+            file.write(f"- question: `{question_text}`\n\n")
+
+            file.write("## Image Prompt\n\n")
+            file.write("```text\n")
+            file.write(f"{image_prompt or ''}\n")
             file.write("```\n")
     except Exception:
         traceback.print_exc()
@@ -603,6 +644,14 @@ def ask_ad_card():
         reading_text=payload["reading_text"],
         context=context,
     )
+    _debug_log_image_prompt_markdown(
+        user_id=user_id,
+        question=payload["question"],
+        hexagram_code=context["hexagram_code"],
+        changing_lines=context["changing_positions"],
+        image_model=payload["image_model"],
+        image_prompt=image_prompt,
+    )
 
     try:
         image_result = generate_ad_image(
@@ -628,8 +677,11 @@ def ask_ad_card():
             "image_model": payload["image_model"],
             "hexagram_code": context["hexagram_code"],
             "hexagram_name": context["hexagram_name"],
-            "prompt_used": image_prompt,
+            "prompt_used": image_result.get("prompt_used") or image_prompt,
             "model": image_result.get("model"),
+            "token_usage": image_result.get("token_usage") or None,
+            "image_size": image_result.get("image_size") or None,
+            "size_mode": image_result.get("size_mode") or None,
             "image_data_url": f"data:{mime_type};base64,{image_b64}",
         }
     )
@@ -694,16 +746,8 @@ def ask_main():
     wants_json = "application/json" in accept_header and "text/plain" not in accept_header
 
     if wants_json:
-        usage_info = {}
-
-        def capture_usage(usage_payload):
-            usage_info.clear()
-            usage_info.update(usage_payload or {})
-
         try:
-            content = "".join(
-                generate_divination(SYSTEM_PROMPT, llm_user_prompt, usage_callback=capture_usage)
-            ).strip()
+            content = "".join(generate_divination(SYSTEM_PROMPT, llm_user_prompt)).strip()
         except LLMServiceError as exc:
             traceback.print_exc()
             _refund_if_needed(user_id, consume_result)
@@ -727,26 +771,18 @@ def ask_main():
                 "changing_lines": changing_lines,
                 "content": content,
                 "saved_to_history": reading_id is not None,
-                "token_usage": usage_info or None,
                 "ask_count": ask_count,
             }
         )
 
     def stream_response():
         chunks = []
-        usage_info = {}
         refunded = False
 
-        def capture_usage(usage_payload):
-            usage_info.clear()
-            usage_info.update(usage_payload or {})
-
         try:
-            for chunk in generate_divination(SYSTEM_PROMPT, llm_user_prompt, usage_callback=capture_usage):
+            for chunk in generate_divination(SYSTEM_PROMPT, llm_user_prompt):
                 chunks.append(chunk)
                 yield chunk
-            if usage_info:
-                yield f"{TOKEN_USAGE_MARKER}{json.dumps(usage_info, ensure_ascii=False)}"
         except LLMServiceError as exc:
             traceback.print_exc()
             if not chunks and not refunded:

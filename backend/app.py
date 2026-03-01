@@ -32,8 +32,6 @@ app.register_blueprint(store_bp, url_prefix="/api/store")
 app.register_blueprint(history_bp, url_prefix="/api/history")
 
 
-
-
 # 啟動時建表
 try:
     init_history_schema()
@@ -47,8 +45,6 @@ try:
     init_users_schema()
 except Exception as e:
     print("DB init skipped:", e)
-
-
 
 load_dotenv()  # 自動讀取 .env
 

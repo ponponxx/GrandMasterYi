@@ -7,6 +7,8 @@ import requests
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_IMAGEN_MODEL = "imagen-4.0-fast-generate-001"
 DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image-preview"
+DEFAULT_IMAGE_ASPECT_RATIO = "9:16"
+DEFAULT_GEMINI_IMAGE_SIZE = "1K"
 REQUEST_CONNECT_TIMEOUT_SECONDS = 10
 REQUEST_READ_TIMEOUT_SECONDS = 180
 
@@ -29,6 +31,11 @@ def _extract_error_message(response: requests.Response) -> str:
 
     text = (response.text or "").strip()
     return text[:300] if text else "unknown_error"
+
+
+def _parse_non_empty_env(var_name: str, default_value: str) -> str:
+    raw = (os.getenv(var_name) or "").strip()
+    return raw or default_value
 
 
 def _post_predict(model: str, payload: dict[str, Any], api_key: str) -> dict[str, Any]:
@@ -131,6 +138,15 @@ def _extract_first_gemini_image(payload: dict[str, Any]) -> tuple[str, str]:
     raise ImagenServiceError("gemini_image_missing_inline_data", status_code=502)
 
 
+def _extract_gemini_usage_metadata(payload: dict[str, Any]) -> dict[str, Any] | None:
+    usage_meta = payload.get("usageMetadata")
+    if not isinstance(usage_meta, dict):
+        return None
+    if not usage_meta:
+        return None
+    return usage_meta
+
+
 def _generate_with_imagen(prompt_text: str, api_key: str, aspect_ratio: str) -> dict[str, Any]:
     model = (os.getenv("IMAGEN_MODEL") or DEFAULT_IMAGEN_MODEL).strip() or DEFAULT_IMAGEN_MODEL
     base_request = {
@@ -142,6 +158,13 @@ def _generate_with_imagen(prompt_text: str, api_key: str, aspect_ratio: str) -> 
             "sampleCount": 1,
             "aspectRatio": aspect_ratio,
             "enhancePrompt": False,
+        },
+    }
+    fallback_keep_ratio_payload = {
+        **base_request,
+        "parameters": {
+            "sampleCount": 1,
+            "aspectRatio": aspect_ratio,
         },
     }
     fallback_payload = {
@@ -157,7 +180,13 @@ def _generate_with_imagen(prompt_text: str, api_key: str, aspect_ratio: str) -> 
         retryable_bad_request = exc.status_code == 400
         if not retryable_bad_request:
             raise
-        payload = _post_predict(model, fallback_payload, api_key)
+        try:
+            payload = _post_predict(model, fallback_keep_ratio_payload, api_key)
+        except ImagenServiceError as ratio_exc:
+            retryable_ratio_bad_request = ratio_exc.status_code == 400
+            if not retryable_ratio_bad_request:
+                raise
+            payload = _post_predict(model, fallback_payload, api_key)
 
     image_b64, mime_type, enhanced_prompt = _extract_first_image(payload)
     return {
@@ -171,28 +200,88 @@ def _generate_with_imagen(prompt_text: str, api_key: str, aspect_ratio: str) -> 
 
 def _generate_with_gemini_image(prompt_text: str, api_key: str, aspect_ratio: str) -> dict[str, Any]:
     model = (os.getenv("GEMINI_IMAGE_MODEL") or DEFAULT_GEMINI_IMAGE_MODEL).strip() or DEFAULT_GEMINI_IMAGE_MODEL
-    payload = {
-        "contents": [{"parts": [{"text": prompt_text}]}],
+    image_size = _parse_non_empty_env("GEMINI_IMAGE_SIZE", DEFAULT_GEMINI_IMAGE_SIZE)
+    base_payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt_text}]}],
+    }
+    text_image_payload = {
+        **base_payload,
+        "generationConfig": {
+            "responseModalities": ["TEXT", "IMAGE"],
+            "imageConfig": {
+                "aspectRatio": aspect_ratio,
+                "imageSize": image_size,
+            },
+        },
+    }
+    image_only_payload = {
+        **base_payload,
         "generationConfig": {
             "responseModalities": ["IMAGE"],
             "imageConfig": {
                 "aspectRatio": aspect_ratio,
-                "imageSize": "2K",
+                "imageSize": image_size,
             },
         },
     }
-    response_payload = _post_generate_content(model, payload, api_key)
+    minimal_payload = {
+        **base_payload,
+        "generationConfig": {
+            "imageConfig": {
+                "aspectRatio": aspect_ratio,
+                "imageSize": image_size,
+            },
+        },
+    }
+
+    size_mode = "text_and_image"
+    try:
+        response_payload = _post_generate_content(model, text_image_payload, api_key)
+    except ImagenServiceError as exc:
+        if exc.status_code != 400:
+            raise
+        print(
+            f"[gemini_image_config_fallback] model={model} mode=text_and_image->image_only",
+            flush=True,
+        )
+        size_mode = "image_only"
+        try:
+            response_payload = _post_generate_content(model, image_only_payload, api_key)
+        except ImagenServiceError as fallback_exc:
+            if fallback_exc.status_code != 400:
+                raise
+            print(
+                f"[gemini_image_config_fallback] model={model} mode=image_only->minimal",
+                flush=True,
+            )
+            size_mode = "minimal"
+            response_payload = _post_generate_content(model, minimal_payload, api_key)
+
     image_b64, mime_type = _extract_first_gemini_image(response_payload)
+    usage_metadata = _extract_gemini_usage_metadata(response_payload)
+    if usage_metadata:
+        print(
+            f"[gemini_image_usage] model={model} usage={json.dumps(usage_metadata, ensure_ascii=False)}",
+            flush=True,
+        )
     return {
         "provider": "gemini31_flash_image_preview",
         "model": model,
         "mime_type": mime_type,
         "image_b64": image_b64,
         "prompt_used": prompt_text,
+        "token_usage": usage_metadata,
+        "image_size": image_size,
+        "aspect_ratio": aspect_ratio,
+        "size_mode": size_mode,
     }
 
 
-def generate_ad_image(prompt: str, aspect_ratio: str = "9:16", model_selector: str = "imagen4_fast") -> dict[str, Any]:
+def generate_ad_image(
+    prompt: str,
+    aspect_ratio: str = DEFAULT_IMAGE_ASPECT_RATIO,
+    model_selector: str = "imagen4_fast",
+) -> dict[str, Any]:
     api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
     if not api_key:
         raise ImagenServiceError("missing_gemini_api_key", status_code=500)
