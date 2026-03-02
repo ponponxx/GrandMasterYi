@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 flutter/
+*.log
 
 # Virtual environment
 venv/
@@ -11,3 +12,11 @@ docs/
 
 # Secret files
 .env
+.env.*
+!.env.example
+backend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# JavaScript dependencies
+frontend/node_modules/

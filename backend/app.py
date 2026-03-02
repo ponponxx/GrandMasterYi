@@ -1,4 +1,4 @@
-import os
+﻿import os
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 
@@ -14,12 +14,12 @@ from history_repo import (
 
 load_dotenv()
 
-# 1️⃣ 先建立 Flask 主應用
+# 1儭 ?遣蝡?Flask 銝餅???
 
 app = Flask(__name__)
 CORS(app)
 
-#拉BP
+#?P
 from auth_route import auth_bp
 from ask_route import ask_bp
 from ads_route import ads_bp
@@ -32,7 +32,7 @@ app.register_blueprint(store_bp, url_prefix="/api/store")
 app.register_blueprint(history_bp, url_prefix="/api/history")
 
 
-# 啟動時建表
+# ???遣銵?
 try:
     init_history_schema()
 except Exception as e:
@@ -46,17 +46,12 @@ try:
 except Exception as e:
     print("DB init skipped:", e)
 
-load_dotenv()  # 自動讀取 .env
+load_dotenv()  # ?芸?霈??.env
 
-'''
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-#APPLE_CLIENT_ID = os.getenv("APPLE_CLIENT_ID")
-APP_SECRET_KEY = os.getenv("APP_SECRET_KEY", "dev-secret")  # 自己加
-'''
 user_sessions = {}
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
+
 
 
