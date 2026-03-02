@@ -4,9 +4,10 @@ from flask import Blueprint, jsonify, request
 
 from auth_route import decode_session_token
 from billing_repo import record_billing_event
-from users_repo import add_user_gold, get_user_by_id, update_user_subscription
+from users_repo import add_user_gold, get_user_by_id, update_user_coins, update_user_subscription
 
 store_bp = Blueprint("store", __name__, url_prefix="/store")
+ONE_USD_SILVER_REWARD = 2
 
 
 def _get_user_id():
@@ -124,5 +125,37 @@ def purchase_coins():
             "ok": True,
             "gold": int(new_gold_balance),
             "message": f"Purchased {amount} gold.",
+        }
+    )
+
+
+@store_bp.route("/pay-usd", methods=["POST"])
+def pay_one_usd_for_silver():
+    user_id = _get_user_id()
+    if not user_id:
+        return jsonify({"error": "invalid_or_expired_token"}), 401
+
+    data = request.get_json(silent=True) or {}
+    provider = str(data.get("provider") or "mock").strip() or "mock"
+    payment_ref = str(data.get("payment_ref") or "").strip()
+    if not payment_ref:
+        return jsonify({"error": "missing_or_invalid_fields"}), 400
+
+    # TODO: replace this mock branch with real payment verification before production.
+    new_silver_balance = update_user_coins(user_id, ONE_USD_SILVER_REWARD)
+    record_billing_event(
+        user_id=user_id,
+        platform=provider,
+        product_id="silver_pack_1usd",
+        purchase_token=payment_ref,
+        event_type="purchase_silver",
+        amount=ONE_USD_SILVER_REWARD,
+    )
+
+    return jsonify(
+        {
+            "ok": True,
+            "silver_granted": ONE_USD_SILVER_REWARD,
+            "new_silver_balance": int(new_silver_balance),
         }
     )

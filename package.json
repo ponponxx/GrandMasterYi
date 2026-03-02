@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@revenuecat/purchases-capacitor": "^12.2.1",
+    "@revenuecat/purchases-capacitor-ui": "^12.2.1"
+  }
+}

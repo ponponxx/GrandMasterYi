@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { useI18n } from '../i18n';
 import { lookupHexagramByCodeAndLines } from '../services/ichingLocal';
@@ -169,7 +170,7 @@ const HistoryCloud: React.FC<HistoryCloudProps> = ({ reloadToken = 0 }) => {
 
   return (
     <div className="space-y-6">
-      {confirmDeleteId !== null && (
+      {confirmDeleteId !== null && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-sm bg-white border-2 border-neutral-900 p-6 rounded-sm shadow-2xl">
             <h3 className="text-xl font-black text-neutral-900 tracking-wide">刪除雲端紀錄</h3>
@@ -192,6 +193,7 @@ const HistoryCloud: React.FC<HistoryCloudProps> = ({ reloadToken = 0 }) => {
             </div>
           </div>
         </div>
+      , document.body
       )}
 
       {history.map((item) => {
@@ -206,7 +208,17 @@ const HistoryCloud: React.FC<HistoryCloudProps> = ({ reloadToken = 0 }) => {
           >
             {item.is_pinned && <div className="absolute top-0 left-0 w-1 h-full bg-red-700" />}
 
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <button
+                disabled={pinningId === item.reading_id}
+                onClick={() => togglePin(item.reading_id, item.is_pinned)}
+                className={`w-12 h-12 flex items-center justify-center rounded-full transition-all shrink-0 ${
+                  item.is_pinned ? 'bg-red-50 text-red-700' : 'text-neutral-300 hover:text-neutral-900 hover:bg-neutral-100'
+                }`}
+              >
+                {item.is_pinned ? <span className="text-xl">{t.pinIconOn}</span> : <span className="text-xl">{t.pinIconOff}</span>}
+              </button>
+
               <div className="flex-1 min-w-0">
                 <p className="text-neutral-800 font-bold text-xl mb-2">
                   {t.questionPrefix}
@@ -219,22 +231,13 @@ const HistoryCloud: React.FC<HistoryCloudProps> = ({ reloadToken = 0 }) => {
                   <span>#{item.reading_id}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   disabled={loadingDetailId === item.reading_id}
                   onClick={() => loadDetail(item.reading_id)}
                   className="px-3 py-2 border border-neutral-300 text-xs tracking-widest hover:border-neutral-900 transition"
                 >
                   {isExpanded ? t.detailButtonHide : t.detailButtonShow}
-                </button>
-                <button
-                  disabled={pinningId === item.reading_id}
-                  onClick={() => togglePin(item.reading_id, item.is_pinned)}
-                  className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${
-                    item.is_pinned ? 'bg-red-50 text-red-700' : 'text-neutral-300 hover:text-neutral-900 hover:bg-neutral-100'
-                  }`}
-                >
-                  {item.is_pinned ? <span className="text-xl">{t.pinIconOn}</span> : <span className="text-xl">{t.pinIconOff}</span>}
                 </button>
                 <button
                   disabled={deletingId === item.reading_id}
@@ -270,3 +273,5 @@ const HistoryCloud: React.FC<HistoryCloudProps> = ({ reloadToken = 0 }) => {
 };
 
 export default HistoryCloud;
+
+

@@ -29,6 +29,17 @@ export type AdsCompleteResponse = {
   expires_in: number;
 };
 
+export interface PayOneUsdRequest {
+  provider: string;
+  payment_ref: string;
+}
+
+export interface PayOneUsdResponse {
+  ok: boolean;
+  silver_granted: number;
+  new_silver_balance: number;
+}
+
 interface FakeLoginResponse {
   token: string;
 }
@@ -396,6 +407,13 @@ class ApiService {
 
   async completeAd(data: AdsCompleteRequest): Promise<AdsCompleteResponse> {
     return this.request<AdsCompleteResponse>('/ads/complete', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async payOneUsd(data: PayOneUsdRequest): Promise<PayOneUsdResponse> {
+    return this.request<PayOneUsdResponse>('/store/pay-usd', {
       method: 'POST',
       body: JSON.stringify(data),
     });

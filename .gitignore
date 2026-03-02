@@ -20,3 +20,4 @@ frontend/.env.*.local
 
 # JavaScript dependencies
 frontend/node_modules/
+node_modules/

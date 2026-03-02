@@ -49,7 +49,7 @@ def init_billing_schema():
     print("billing tables ready.")
 
 
-FREE_AD_COINS = 3
+FREE_AD_COINS = 100
 DAILY_AD_LIMIT = 5
 SUBSCRIBER_MONTHLY_QUOTA = 1000
 DAILY_SUBSCRIBER_LIMIT = SUBSCRIBER_MONTHLY_QUOTA // 30

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+import AdRewardButton from '../components/AdRewardButton';
 import HexagramDisplay from '../components/HexagramDisplay';
 import { useI18n } from '../i18n';
 import { api } from '../services/api';
@@ -21,6 +22,7 @@ interface LocalResult {
 }
 
 const MAX_QUESTION_LENGTH = 1000;
+const MIN_SILVER_TO_ASK = 1;
 const APP_NAME = 'MasterYi';
 const GEN_PIC = false;
 const STREAM_TYPEWRITER_MS = 14;
@@ -35,6 +37,13 @@ const fillTemplate = (template: string, vars: Record<string, string | number>) =
     out = out.replace(`{${key}}`, String(value));
   });
   return out;
+};
+
+const toFixedFifoChars = (text: string, charCount: number): string => {
+  if (charCount <= 0) {
+    return '';
+  }
+  return text.slice(-charCount);
 };
 
 const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
@@ -432,7 +441,7 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
       return;
     }
 
-    if (user.wallet.gold === 0 && user.wallet.silver === 0) {
+    if ((user.wallet.silver || 0) < MIN_SILVER_TO_ASK) {
       setShowAdDialog(true);
     } else {
       requestInterpretation();
@@ -453,11 +462,11 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
     await buildAdCard(model, questionText, readingText);
   };
 
-  const handleWatchAd = async () => {
+  const handleAdRewardEarned = async (payload: { provider: 'admob' | 'unknown'; adProof: string }) => {
     setShowAdDialog(false);
     setLoading(true);
     try {
-      const adRes = await api.completeAd({ provider: 'unknown', ad_proof: 'mock_proof' });
+      const adRes = await api.completeAd({ provider: payload.provider, ad_proof: payload.adProof });
       if ('ad_session_token' in adRes) {
         await requestInterpretation(adRes.ad_session_token);
       } else {
@@ -472,12 +481,35 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
     }
   };
 
+  const handlePayOneUsd = async () => {
+    setShowAdDialog(false);
+    setLoading(true);
+    try {
+      await api.payOneUsd({
+        provider: 'mock',
+        payment_ref: `mock_usd_${Date.now()}`,
+      });
+      const updatedProfile = await api.getMe();
+      onUserUpdate(updatedProfile);
+      await requestInterpretation();
+    } catch (error: any) {
+      alert(`${t.alerts.payFailedPrefix}${error?.message || 'unknown_error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const castingStatusText =
     currentThrows.length < 6
       ? t.status.castingLine.replace('{line}', String(currentThrows.length + 1))
       : t.status.castingDone;
   const showAiResultPanel = !!aiReading;
   const showAnalyzingTicker = showAiResultPanel && !finalAnswerText;
+  const streamedText = streamInterpretationText || aiReading?.content || '';
+  const streamingPreviewText = toFixedFifoChars(streamedText, 60);
+  const interpretationDisplayText = finalAnswerText ? streamedText : streamingPreviewText;
+  const analyzingDots = '.'.repeat((analyzingTickerFrame % 3) + 1);
+  const isFinalAnswerComplete = !!finalAnswerText && finalQueueRef.current.length === 0;
 
   return (
     <div className="flex flex-col items-center w-full max-w-xl mx-auto space-y-10 pb-32">
@@ -487,11 +519,23 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
             <h3 className="text-2xl font-black text-neutral-900 mb-4 tracking-widest">{t.adDialog.title}</h3>
             <p className="text-neutral-600 mb-8 leading-relaxed font-serif-tc">{t.adDialog.description}</p>
             <div className="space-y-3">
-              <button
-                onClick={handleWatchAd}
+              <AdRewardButton
+                onRewardEarned={handleAdRewardEarned}
+                disabled={loading}
                 className="w-full py-4 bg-neutral-900 text-white font-bold tracking-widest hover:bg-black transition"
+                labels={{
+                  ready: t.adDialog.watchButton,
+                  loading: t.adDialog.watchButtonLoading,
+                  web: t.adDialog.watchButtonWeb,
+                  busy: t.adDialog.watchButtonBusy,
+                }}
+              />
+              <button
+                onClick={handlePayOneUsd}
+                disabled={loading}
+                className="w-full py-4 bg-emerald-700 text-white font-bold tracking-widest hover:bg-emerald-800 transition"
               >
-                {t.adDialog.watchButton}
+                {t.adDialog.payButton}
               </button>
               <button
                 onClick={() => setShowAdDialog(false)}
@@ -627,18 +671,9 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
               <div className="space-y-5">
                 {showAnalyzingTicker && (
                   <div className="sticky top-0 z-10 space-y-2 pb-2">
-                    {Array.from({ length: 3 }).map((_, idx) => {
-                      const dots = '.'.repeat(((analyzingTickerFrame + idx) % 3) + 1);
-                      return (
-                        <div
-                          key={idx}
-                          className="h-9 px-3 border border-amber-300/60 bg-amber-50/10 text-amber-100 text-sm tracking-[0.2em] flex items-center animate-pulse rounded-sm"
-                        >
-                          {ANALYZING_TICKER_TEXT}
-                          {dots}
-                        </div>
-                      );
-                    })}
+                    <div className="px-3 py-2 border border-amber-300/60 bg-amber-50/10 text-amber-100 text-sm tracking-[0.2em] whitespace-pre-wrap animate-pulse rounded-sm min-h-[5.5rem]">
+                      {`\n${ANALYZING_TICKER_TEXT}${analyzingDots}\n`}
+                    </div>
                   </div>
                 )}
 
@@ -653,12 +688,17 @@ const Divination: React.FC<DivinationProps> = ({ user, onUserUpdate }) => {
                   </div>
                 )}
 
-                <div
-                  className={`prose prose-invert max-w-none text-neutral-200 font-serif-tc text-xl leading-[2.2] whitespace-pre-wrap transition-all duration-500 ${
-                    isFinalAnswerAnimating ? 'translate-y-3' : ''
-                  }`}
-                >
-                  {streamInterpretationText || aiReading.content}
+                <div className="relative">
+                  <div
+                    className={`prose prose-invert max-w-none text-neutral-200 font-serif-tc text-xl leading-[2.2] whitespace-pre-wrap transition-all duration-500 ${
+                      isFinalAnswerAnimating ? 'translate-y-3' : ''
+                    } ${isFinalAnswerComplete ? 'blur-[1.4px] opacity-80' : ''}`}
+                  >
+                    {interpretationDisplayText}
+                  </div>
+                  {isFinalAnswerComplete && (
+                    <div className="pointer-events-none absolute inset-0 rounded-sm bg-neutral-900/10 backdrop-blur-[0.8px]" />
+                  )}
                 </div>
 
                 {loading && (

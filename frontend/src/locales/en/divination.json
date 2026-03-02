@@ -4,12 +4,17 @@
     "unknownError": "Unknown error",
     "missingQuestion": "Please enter a question before interpretation.",
     "interpretationFailedPrefix": "Interpretation failed: ",
-    "adFailed": "Failed to complete ad reward."
+    "adFailed": "Failed to complete ad reward.",
+    "payFailedPrefix": "1 USD payment failed: "
   },
   "adDialog": {
-    "title": "Need More Coins",
-    "description": "You are out of coins. Watch a rewarded ad to unlock one interpretation, or close and come back later.",
-    "watchButton": "Watch Ad",
+    "title": "Not Enough Silver",
+    "description": "You don't have enough silver. Choose one option below to continue divination.",
+    "watchButton": "Watch Ad +1 Silver",
+    "watchButtonLoading": "Loading Ad...",
+    "watchButtonWeb": "Web Test: Watch Ad +1 Silver",
+    "watchButtonBusy": "Processing...",
+    "payButton": "Pay 1 USD",
     "cancelButton": "Cancel"
   },
   "header": {
