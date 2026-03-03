@@ -1,23 +1,24 @@
-# Python cache
+# dependencies
+node_modules/
+dist/
+frontend/node_modules/
+
+# Android build outputs
+android/.gradle/
+android/build/
+android/app/build/
+
+# Secrets
+RevenueAPIKEY/
+*.keystore
+*.jks
+.env
+frontend/.env.local
+
+# Python
+backend/venv/
+venv/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-flutter/
-*.log
 
-# Virtual environment
-venv/
-docs/
-
-# Secret files
-.env
-.env.*
-!.env.example
-backend/.env
-frontend/.env.local
-frontend/.env.*.local
-
-# JavaScript dependencies
-frontend/node_modules/
-node_modules/
+docs/GGOAuth/*.json

@@ -1,5 +1,7 @@
 {
   "dependencies": {
+    "@capacitor/cli": "^8.1.0",
+    "@capacitor/core": "^8.1.0",
     "@revenuecat/purchases-capacitor": "^12.2.1",
     "@revenuecat/purchases-capacitor-ui": "^12.2.1"
   }
