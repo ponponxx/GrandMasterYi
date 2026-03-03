@@ -1,8 +1,31 @@
 {
   "dependencies": {
+    "@capacitor/android": "^8.1.0",
     "@capacitor/cli": "^8.1.0",
     "@capacitor/core": "^8.1.0",
     "@revenuecat/purchases-capacitor": "^12.2.1",
     "@revenuecat/purchases-capacitor-ui": "^12.2.1"
-  }
+  },
+  "name": "projgmyi",
+  "version": "1.0.0",
+  "description": "This project has:\r - `backend` (Flask + PostgreSQL)\r - `frontend` (Vite + React)",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ponponxx/GrandMasterYi.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ponponxx/GrandMasterYi/issues"
+  },
+  "homepage": "https://github.com/ponponxx/GrandMasterYi#readme"
 }

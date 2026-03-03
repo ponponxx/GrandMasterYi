@@ -1,5 +1,5 @@
 {
   "appId": "com.felix.grandmasteryiapp",
   "appName": "Master I Ching: Study & Change",
-  "webDir": "dist"
+  "webDir": "frontend/dist"
 }
